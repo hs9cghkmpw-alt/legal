@@ -137,7 +137,13 @@ async function drainQueue(env,limit=20){
   return {sent,errors,processed:rows.results?.length||0};
  }finally{await env.DB.prepare("UPDATE system_locks SET lock_token=NULL,lock_until=NULL WHERE lock_name='delivery' AND lock_token=?").bind(lease).run()}
 }
-async function sendNow(req,env){if(!isAdmin(req,env))return denied();const run=await enqueueWeekly(env);const drain=await drainQueue(env,20);return json({run,drain})}
+async function sendNow(req,env){
+ if(!isAdmin(req,env))return denied();
+ const pending=await env.DB.prepare("SELECT id FROM delivery_queue WHERE status IN ('pending','sending') LIMIT 1").first();
+ const run=pending?{alreadyQueued:true,note:"既存キューを処理します"}:await enqueueWeekly(env);
+ const drain=await drainQueue(env,20);
+ return json({run,drain});
+}
 
 export default {
  async fetch(req,env){
