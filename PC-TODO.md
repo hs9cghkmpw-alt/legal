@@ -2,63 +2,44 @@
 
 ## 前提
 - リポジトリ: https://github.com/hs9cghkmpw-alt/legal
-- ブランチ: mvp/scaffold-2026-10
-- 本番デプロイはまだ行わない。HOJO-LETTERの秘密情報をコピーしない。
+- 作業ブランチ: fix/security-queue-2026-10
+- **本番デプロイ・実メール送信はまだ行わない。** 情報源の利用条件とプライバシー方針が未確認です。
+- HOJO-LETTERの秘密情報をコピーしない。
 
-## 環境確認
+## ブランチ・テスト
 ```powershell
-node --version
-npm --version
-git --version
-npx wrangler --version
-```
-
-## clone / ブランチ
-```powershell
-Set-Location $HOME\Documents
-git clone https://github.com/hs9cghkmpw-alt/legal.git rule-change-letter
-Set-Location .\rule-change-letter
+Set-Location $HOME\Documents\rule-change-letter
 git fetch origin
-git switch mvp/scaffold-2026-10
-```
-すでにclone済みならcloneを繰り返さず git status / git branch --all で確認。
-
-## 依存関係とローカル設定
-```powershell
+git switch fix/security-queue-2026-10
+git pull
 npm install
-Copy-Item .dev.vars.example .dev.vars
+npm test
+node --check .\src\index.js
 ```
-.dev.vars に BREVO_API_KEY、ADMIN_TOKEN（32文字以上のランダム値）、BASE_URL、SENDER_EMAIL を設定。秘密値はGitHubやチャットに貼らない。
+まだcloneしていない場合は、先に `git clone https://github.com/hs9cghkmpw-alt/legal.git rule-change-letter` を実行してください。
 
-## D1作成・ローカル起動
+## ローカルDB
+新規ローカルDB：
 ```powershell
-npx wrangler login
-npx wrangler d1 create rule-change-letter
-# 出力された database_id を wrangler.toml に設定
 npx wrangler d1 execute rule-change-letter --local --file=./schema.sql
+```
+既存DBは先にバックアップし、`migrations/0001_security_queue.sql` を1回だけ適用します。新規DBには移行SQLを適用しないでください。
+```powershell
+npx wrangler d1 execute rule-change-letter --local --file=./migrations/0001_security_queue.sql
+```
+
+## 起動
+```powershell
+Copy-Item .dev.vars.example .dev.vars
 npx wrangler dev
 ```
-別PowerShellで:
-```powershell
-Invoke-RestMethod http://localhost:8787/health
-Invoke-RestMethod http://localhost:8787/api/categories
-```
+登録APIは有効なHTTPSの `PRIVACY_URL` が設定されるまで登録を拒否します。公開用方針を完成・公開してから設定してください。
 
-## 本番前に必須
-- 情報源の利用・加工・再配信条件を確認し、未確認なら terms_checked=0 のまま
-- RSS形式を実データで検証
-- 登録→確認メール→確認→配信停止をテスト
-- 誤った管理トークンで401になることを確認
-- 未承認記事が配信されないことを確認
-- 20人超の複数バッチ処理を実装してから利用者を増やす
-- プライバシー方針、運営者情報、ボット対策、送信元認証を整備
-- 無料枠と利用条件を確認
-
-## 未完成
-- 管理者向け承認UI（管理APIのみ）
-- 登録者向けカテゴリ編集画面（初期登録フォームのみ）
-- e-Gov法令APIの更新検知と省庁情報源の拡張
-- 施行日・対象者の自動抽出と原文照合
-- 無料AI/ローカルAI検証
-- レート制限・Turnstile等のボット対策
-- 20人超の配信キュー・複数バッチ処理
+## 人が確認すべき項目
+- プライバシー方針の草案を完成させ、運営者情報・問い合わせ先・保存期間を記載
+- デジタル庁RSSの形式と利用・加工・再配信条件を確認し、未確認なら `terms_checked=0`
+- e-Gov法令APIと省庁情報源を追加設計
+- ローカルテスト、D1移行テスト、実際のメール到達性テスト
+- Cloudflare/Brevoの無料枠・レート・規約を確認
+- 本番の `BASE_URL`、`PRIVACY_URL`、送信元ドメインを設定
+- 未承認記事が送られないこと、配信停止、失敗再試行、20人超のバッチをテスト
