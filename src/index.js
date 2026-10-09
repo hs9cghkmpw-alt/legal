@@ -155,7 +155,8 @@ export default {
  async scheduled(event,env,ctx){
   ctx.waitUntil((async()=>{
    if(event.cron==="0 22 * * *"){try{await collectDigitalRss(env)}catch(e){await env.DB.prepare("UPDATE sources SET last_error=? WHERE id='digital_rss'").bind(String(e.message||e).slice(0,500)).run();console.error(e)}}
-   else if(event.cron==="0 23 * * SUN"){try{await enqueueWeekly(env,"weekly-"+new Date().toISOString().slice(0,10))}catch(e){console.error(e)}}\n   else if(event.cron==="*/10 * * * *"){try{await drainQueue(env,20)}catch(e){console.error(e)}}
+   else if(event.cron==="0 23 * * SUN"){try{await enqueueWeekly(env,"weekly-"+new Date().toISOString().slice(0,10))}catch(e){console.error(e)}}
+   else if(event.cron==="*/10 * * * *"){try{await drainQueue(env,20)}catch(e){console.error(e)}}
   })());
  }
 };
