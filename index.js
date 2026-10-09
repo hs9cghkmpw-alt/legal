@@ -87,6 +87,7 @@ async function collectRecent(db) {
       const block = match[1];
       const lawName = xmlValue(block, "LawName");
       const lawNo = xmlValue(block, "LawNo");
+      const lawType = xmlValue(block, "LawTypeName") || xmlValue(block, "LawType");
       const lawId = xmlValue(block, "LawId");
       const amendName = xmlValue(block, "AmendName");
       const amendNo = xmlValue(block, "AmendNo");
@@ -96,13 +97,14 @@ async function collectRecent(db) {
       const title = [amendName || lawName, amendNo ? `(${amendNo})` : ""].filter(Boolean).join(" ");
       if (!title) continue;
 
-      const externalId = [ymd, lawId, amendNo, title].filter(Boolean).join(":");
+      // Stable across the three-day overlap: the same amendment should only be stored once.
+      const externalId = [lawId, amendNo, amendDate, title].filter(Boolean).join(":");
       const digestInput = new TextEncoder().encode(externalId);
       const digest = await crypto.subtle.digest("SHA-256", digestInput);
       const hash = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
       const sourceUrl = lawUrl || (lawId ? `https://laws.e-gov.go.jp/law/${encodeURIComponent(lawId)}` : "https://laws.e-gov.go.jp/");
       const raw = JSON.stringify({
-        lawName, lawNo, lawId, amendName, amendNo,
+        lawName, lawNo, lawType, lawId, amendName, amendNo,
         amendmentPromulgationDate: amendDate,
         effectiveDate, enforcementComment: xmlValue(block, "EnforcementComment"),
         enforcementFlag: xmlValue(block, "EnforcementFlg"),
@@ -111,9 +113,13 @@ async function collectRecent(db) {
 
       const result = await db.prepare(`
         INSERT OR IGNORE INTO updates
-          (external_id, title, source_url, published_at, category, content_hash, raw_text, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'detected')
-      `).bind(externalId, title, sourceUrl, formatDate(amendDate) || formatDate(ymd), classify(lawNo), hash, raw).run();
+          (external_id, title, source_url, published_at, effective_date, law_id, law_number, law_type, category, content_hash, raw_text, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'detected')
+      `).bind(
+        externalId, title, sourceUrl, formatDate(amendDate) || formatDate(ymd),
+        formatDate(effectiveDate), lawId || null, lawNo || null, lawType || null,
+        classify(lawType), hash, raw
+      ).run();
 
       if (result.meta?.changes) inserted++;
       else skipped++;
@@ -134,10 +140,12 @@ function formatDate(value) {
   return /^\d{8}$/.test(value || "") ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : null;
 }
 
-function classify(lawNo) {
-  if (lawNo.includes("法律")) return "法律";
-  if (lawNo.includes("政令") || lawNo.includes("勅令")) return "政令";
-  if (lawNo.includes("省令") || lawNo.includes("府令") || lawNo.includes("規則")) return "省令・規則";
+function classify(lawType) {
+  const type = String(lawType || "");
+  if (type.includes("法律")) return "法律";
+  if (type.includes("政令") || type.includes("勅令")) return "政令";
+  if (type.includes("省令") || type.includes("府令") || type.includes("規則")) return "省令・規則";
+  if (type.includes("条例")) return "条例";
   return "法令";
 }
 
