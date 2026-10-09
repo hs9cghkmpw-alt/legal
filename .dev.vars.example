@@ -1,0 +1,5 @@
+# .dev.vars にコピーして設定。秘密値をコミットしない
+BREVO_API_KEY=
+ADMIN_TOKEN=replace-with-a-random-secret-of-at-least-32-characters
+BASE_URL=http://localhost:8787
+SENDER_EMAIL=replace-with-verified-sender@example.com
