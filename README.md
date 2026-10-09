@@ -1,37 +1,32 @@
 # ルール変更レター（MVP）
 
-個人・法人を区別せず、登録時に選んだ立場からカテゴリを提案し、利用者が選択したカテゴリに合うルール変更情報を週1回メール配信するサービスの叩き台です。
+個人・法人を分けず、登録時に立場からカテゴリを提案し、利用者が選んだカテゴリに合うルール変更情報を届ける試作版です。
 
-## 方針
-- 開発費・運用費0円を優先。無料枠・利用条件を超える場合は機能を縮小し、自動課金しない。
-- Cloudflare Workers + D1。外部AI APIは初期版で使用しない。
-- 公式情報は一元収集し、記事を一度整理。利用者ごとに配信カテゴリだけを照合。
-- 新着記事は pending として保存し、管理者承認まで配信しない。
-- 情報源の利用・加工・再配信条件を確認するまで取得を有効化しない。
+## 現状・制限
+- 未デプロイ。実データ、実メール、無料枠、セキュリティの検証は未実施。
+- 情報源はデジタル庁RSS候補のみ。利用条件確認前は `terms_checked=0` のまま収集停止。
+- 外部AI APIは未使用。記事の原文確認・解説入力・承認は手作業。
+- プライバシー方針のHTTPS URLが設定されるまで登録APIは登録を拒否。
+- 配信はキュー方式で1回最大20人。未処理分は10分間隔で処理し、送信失敗は最大5回まで再試行。
+- メールサービスが受理した直後にWorkerが停止する場合など、重複配信のリスクを完全には排除できない。
+- 無料枠の維持・自動課金なしは、Cloudflareとメール配信サービスの設定・規約確認が必要。
 
-## 現状
-未デプロイの開発用スキャフォールド。D1作成、Secret設定、実データ試験、情報源の利用条件確認、セキュリティ確認は未実施です。
-
-## 開発（PowerShell）
+## ローカル開発
 ```powershell
 npm install
 Copy-Item .dev.vars.example .dev.vars
-npx wrangler d1 create rule-change-letter
-# 表示された database_id を wrangler.toml に設定
+npm test
 npx wrangler d1 execute rule-change-letter --local --file=./schema.sql
 npx wrangler dev
 ```
 
-## 主要ルート
-- GET / : 登録ページ
-- GET /api/categories : 立場・カテゴリ定義
-- POST /api/subscribe : 登録申請
-- GET /confirm?token=... : メール確認
-- GET /unsubscribe?token=... : 配信停止
-- GET /api/admin/collect : 収集（Bearerトークン必須）
-- GET /api/admin/updates : 承認待ち記事一覧（Bearerトークン必須）
-- POST /api/admin/approve : 記事承認（Bearerトークン必須）
-- GET /api/admin/send : 手動配信（Bearerトークン必須）
-- GET /health : ヘルスチェック
+既存DBは `schema.sql` を再実行せず、バックアップ後に `migrations/0001_security_queue.sql` を適用してください。新規DBには移行SQLを適用しないでください。
 
-公開前に情報源の利用条件、プライバシー方針、ボット対策、メール送信元認証、配信停止、公布日と施行日の区別、Cloudflare/Brevo無料枠を確認してください。
+## 管理API
+- `POST /api/admin/collect` — 収集（Bearerトークン必須）
+- `GET /api/admin/updates` — 承認待ち記事一覧（Bearerトークン必須）
+- `POST /api/admin/approve` — 記事承認（Bearerトークン必須）
+- `POST /api/admin/send` — キュー作成と最大20人の即時処理（Bearerトークン必須）
+
+## 公開前必須
+情報源の利用条件、プライバシー方針、運営者情報、ボット対策、メール送信元認証、Cloudflare/Brevoの無料枠、Cron制限、バックアップ、配信停止を確認してください。公布日と施行日を混同しないこと。
