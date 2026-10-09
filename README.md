@@ -20,7 +20,7 @@ npx wrangler d1 execute rule-change-letter --local --file=./schema.sql
 npx wrangler dev
 ```
 
-既存DBは `schema.sql` を再実行せず、バックアップ後に `migrations/0001_security_queue.sql` を適用してください。新規DBには移行SQLを適用しないでください。
+このプロジェクトは未デプロイの試作版です。新規のローカルDBで `schema.sql` を使用してください。既存D1データベースがすでにある場合は、現時点で安全な移行SQLが同梱されていないため、`schema.sql` を再実行せず作業を止めてください。
 
 ## 管理API
 - `POST /api/admin/collect` — 収集（Bearerトークン必須）
