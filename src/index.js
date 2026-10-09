@@ -62,8 +62,11 @@ async function unsubscribe(req,url,env){
  if(req.method==="POST"){try{t=String((await req.formData()).get("token")||"")}catch{}}
  if(!t||t.length>100)return page("配信停止","<h1>リンクが無効です</h1>",400);
  if(req.method==="GET")return page("配信停止",'<h1>配信停止の確認</h1><form method="post" action="/unsubscribe"><input type="hidden" name="token" value="'+escapeHtml(t)+'"><button>配信を停止する</button></form>');
- const r=await env.DB.prepare("UPDATE subscribers SET unsubscribed=1,confirmed=0 WHERE unsubscribe_token=?").bind(t).run();
- return r.meta.changes?page("配信停止","<h1>配信を停止しました</h1>"):page("配信停止","<h1>リンクが無効です</h1>",404);
+ const subscriber=await env.DB.prepare("SELECT id FROM subscribers WHERE unsubscribe_token=?").bind(t).first();
+ if(!subscriber)return page("配信停止","<h1>リンクが無効です</h1>",404);
+ await env.DB.prepare("UPDATE subscribers SET unsubscribed=1,confirmed=0 WHERE id=?").bind(subscriber.id).run();
+ await env.DB.prepare("DELETE FROM delivery_queue WHERE subscriber_id=? AND status='pending'").bind(subscriber.id).run();
+ return page("配信停止","<h1>配信を停止しました</h1>");
 }
 async function collect(req,env){
  if(!isAdmin(req,env))return denied();
