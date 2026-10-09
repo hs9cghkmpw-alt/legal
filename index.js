@@ -16,7 +16,7 @@ export default {
     if (url.pathname === "/api/updates") {
       if (!env.DB) return json({ items: [], note: "D1未設定です。READMEのセットアップ手順を実行してください。" });
       const result = await env.DB.prepare(
-        "SELECT id, title, source_url, published_at, category, status, detected_at FROM updates ORDER BY detected_at DESC LIMIT 100"
+        "SELECT id, title, source_url, published_at, effective_date, law_id, law_number, law_type, category, status, detected_at FROM updates ORDER BY detected_at DESC LIMIT 100"
       ).all();
       return json({ items: result.results || [] });
     }
@@ -36,7 +36,7 @@ export default {
     if (url.pathname !== "/") return new Response("Not Found", { status: 404 });
 
     const items = env.DB
-      ? await env.DB.prepare("SELECT title, source_url, published_at, category, status FROM updates ORDER BY detected_at DESC LIMIT 20").all()
+      ? await env.DB.prepare("SELECT title, source_url, published_at, effective_date, category, status FROM updates ORDER BY detected_at DESC LIMIT 20").all()
       : { results: [] };
     return new Response(renderPage(items.results || [], !env.DB), {
       headers: { "content-type": "text/html; charset=utf-8" }
@@ -151,7 +151,7 @@ function classify(lawType) {
 
 function renderPage(items, demoMode) {
   const cards = items.length
-    ? items.map(item => `<article><span class="tag">${escapeHtml(item.category || "法令")}</span><h3>${escapeHtml(item.title)}</h3><p>公布日：${escapeHtml(item.published_at || "未確認")}</p><p><a href="${escapeHtml(item.source_url)}" rel="noopener noreferrer" target="_blank">公式情報を確認する ↗</a></p><small>状態：${escapeHtml(item.status || "検知済み")}</small></article>`).join("")
+    ? items.map(item => `<article><span class="tag">${escapeHtml(item.category || "法令")}</span><h3>${escapeHtml(item.title)}</h3><p>公布日：${escapeHtml(item.published_at || "未確認")}</p><p>施行日：${escapeHtml(item.effective_date || "未確認")}</p><p><a href="${escapeHtml(item.source_url)}" rel="noopener noreferrer" target="_blank">公式情報を確認する ↗</a></p><small>状態：${escapeHtml(item.status || "検知済み")}</small></article>`).join("")
     : `<article><h3>${demoMode ? "D1を設定してください" : "まだ収集データがありません"}</h3><p>${demoMode ? "READMEの手順に沿って専用D1データベースを設定すると、実際の更新法令を収集できます。" : "収集処理が動作すると、ここに更新候補が表示されます。"}</p></article>`;
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>暮らしのルール変更レター</title>
 <style>body{max-width:780px;margin:0 auto;padding:28px 18px;font:16px/1.7 system-ui,sans-serif;color:#20242a}header{padding:22px 0;border-bottom:1px solid #ddd;margin-bottom:24px}.tag{display:inline-block;border:1px solid #888;border-radius:99px;padding:2px 10px;font-size:.85rem}article{border:1px solid #ddd;border-radius:14px;padding:18px;margin:16px 0}small{color:#555}a{overflow-wrap:anywhere}footer{border-top:1px solid #ddd;margin-top:32px;padding-top:16px;color:#555;font-size:.9rem}</style></head><body>
