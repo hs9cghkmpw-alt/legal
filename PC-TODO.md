@@ -23,10 +23,7 @@ node --check .\src\index.js
 ```powershell
 npx wrangler d1 execute rule-change-letter --local --file=./schema.sql
 ```
-既存DBは先にバックアップし、`migrations/0001_security_queue.sql` を1回だけ適用します。新規DBには移行SQLを適用しないでください。
-```powershell
-npx wrangler d1 execute rule-change-letter --local --file=./migrations/0001_security_queue.sql
-```
+このプロジェクトは未デプロイの試作版です。新規ローカルDBだけ `schema.sql` で初期化してください。既存のD1 DBがある場合は、このブランチに安全な移行SQLが同梱されていないため、`schema.sql` を再実行せず作業を止めてください。
 
 ## 起動
 ```powershell
