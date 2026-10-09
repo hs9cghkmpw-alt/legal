@@ -26,15 +26,26 @@
 
 ## セットアップ
 
-必要なのはNode.jsとWranglerです。Windows PowerShellでリポジトリをクローンして作業する場合：
+必要なのはGit、Node.js、PowerShellです。まずバージョンを確認します。
+
+```powershell
+git --version
+node --version
+npm --version
+```
+
+Windows PowerShellでリポジトリをクローンして作業する場合：
 
 ```powershell
 git clone -b mvp-prototype https://github.com/hs9cghkmpw-alt/legal.git
-cd legal
+Set-Location .\legal
 npm init -y
 npm install --save-dev wrangler
+npx wrangler --version
 npx wrangler login
 ```
+
+既に `legal` フォルダがある場合は、二重にクローンせず、そのフォルダで `git status` と `git branch --show-current` を確認してください。
 
 Cloudflareに新しいD1を作成します（既存の補助金レター用DBは指定しないでください）。
 
@@ -42,7 +53,13 @@ Cloudflareに新しいD1を作成します（既存の補助金レター用DBは
 npx wrangler d1 create legal-change-letter
 ```
 
-表示された `database_id` を `wrangler.toml` の `REPLACE_WITH_NEW_DATABASE_ID` に設定し、保存します。次にスキーマを適用します。
+表示された `database_id` を `wrangler.toml` の `REPLACE_WITH_NEW_DATABASE_ID` に設定し、保存します。編集には次を使えます。
+
+```powershell
+notepad .\wrangler.toml
+```
+
+**必ず専用D1のIDを設定**してください。補助金レター用DBのIDは使わないでください。次にスキーマを適用します。
 
 ```powershell
 npx wrangler d1 execute legal-change-letter --remote --file=./schema.sql
@@ -56,10 +73,23 @@ npx wrangler secret put COLLECT_TOKEN
 
 入力を求められたらランダムな秘密値を貼り付けます。トークンをコードやGitに保存しないでください。
 
+データベースの作成・スキーマ適用後、テーブルができたか確認します。
+
+```powershell
+npx wrangler d1 execute legal-change-letter --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
+
 ローカル確認：
 
 ```powershell
 npx wrangler dev
+```
+
+別のPowerShellウィンドウでローカル応答を確認できます（開発サーバーが起動している間）。
+
+```powershell
+Invoke-RestMethod http://localhost:8787/api/health
+Invoke-RestMethod http://localhost:8787/api/updates
 ```
 
 公開する場合：
