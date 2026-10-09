@@ -58,10 +58,20 @@ async function listUpdates(req,env){
 async function approve(req,env){
  if(!isAdmin(req,env))return denied();
  let d;try{d=await req.json()}catch{return json({error:"JSON形式で送信してください"},400)}
- const id=Number(d.article_id),status=d.status==="rejected"?"rejected":"approved";
+ const id=Number(d.article_id);
  if(!Number.isSafeInteger(id)||id<1)return json({error:"article_id が不正です"},400);
- const r=await env.DB.prepare("UPDATE articles SET status=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'").bind(status,id).run();
- return r.meta.changes?json({ok:true,article_id:id,status}):json({error:"承認待ち記事が見つかりません"},404);
+ if(d.status==="rejected"){
+  const rejected=await env.DB.prepare("UPDATE articles SET status='rejected',reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'").bind(id).run();
+  return rejected.meta.changes?json({ok:true,article_id:id,status:"rejected"}):json({error:"承認待ち記事が見つかりません"},404);
+ }
+ const fields=["summary","what_changed","who_affected","action_needed"];
+ for(const key of fields)if(typeof d[key]!=="string"||!d[key].trim())return json({error:key+" は必須です。原文確認後の内容を入力してください。"},400);
+ const cats=[...new Set(Array.isArray(d.category_ids)?d.category_ids:[])].filter(x=>CATEGORIES.some(c=>c.id===x));
+ if(!cats.length)return json({error:"有効な category_ids を1つ以上指定してください"},400);
+ const effectiveDate=typeof d.effective_date==="string"?d.effective_date.trim():"";
+ const result=await env.DB.prepare("UPDATE articles SET summary=?,what_changed=?,effective_date=?,who_affected=?,action_needed=?,category_ids=?,status='approved',reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'")
+  .bind(d.summary.trim(),d.what_changed.trim(),effectiveDate,d.who_affected.trim(),d.action_needed.trim(),JSON.stringify(cats),id).run();
+ return result.meta.changes?json({ok:true,article_id:id,status:"approved"}):json({error:"承認待ち記事が見つかりません"},404);
 }
 async function dispatch(env){
  const a=await env.DB.prepare("SELECT a.id,a.summary,a.what_changed,a.effective_date,a.who_affected,a.action_needed,a.category_ids,u.title,u.url FROM articles a JOIN updates u ON u.id=a.update_id WHERE a.status='approved' ORDER BY u.collected_at DESC LIMIT 100").all();
