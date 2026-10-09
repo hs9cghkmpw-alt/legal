@@ -2,8 +2,12 @@ name = "legal-change-letter"
 main = "index.js"
 compatibility_date = "2026-10-09"
 
-# 0円MVP prototype. Add a separate D1 binding only after creating a new database.
-# Never point this at the HOJO-LETTER production database.
+# D1は新規作成後に設定する。HOJO-LETTER本番DBを指定しないこと。
+[[d1_databases]]
+binding = "DB"
+database_name = "legal-change-letter"
+database_id = "REPLACE_WITH_NEW_DATABASE_ID"
 
 [triggers]
-crons = []
+# 毎日 UTC 03:20（日本時間 12:20）に更新法令を確認
+crons = ["20 3 * * *"]
