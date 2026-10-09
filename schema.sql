@@ -1,59 +1,25 @@
 PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS subscribers (
- id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE,
- confirmation_token TEXT NOT NULL UNIQUE, confirmed INTEGER NOT NULL DEFAULT 0,
- unsubscribed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
- confirmed_at TEXT
-);
-CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, label TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, label TEXT NOT NULL, description TEXT NOT NULL DEFAULT '');
-CREATE TABLE IF NOT EXISTS subscriber_roles (
- subscriber_id INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,
- role_id TEXT NOT NULL REFERENCES roles(id), PRIMARY KEY(subscriber_id,role_id)
-);
-CREATE TABLE IF NOT EXISTS subscriber_categories (
- subscriber_id INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,
- category_id TEXT NOT NULL REFERENCES categories(id), PRIMARY KEY(subscriber_id,category_id)
-);
-CREATE TABLE IF NOT EXISTS sources (
- id TEXT PRIMARY KEY, label TEXT NOT NULL, url TEXT NOT NULL, source_type TEXT NOT NULL,
- enabled INTEGER NOT NULL DEFAULT 1, terms_checked INTEGER NOT NULL DEFAULT 0,
- last_checked_at TEXT, last_error TEXT
-);
-CREATE TABLE IF NOT EXISTS updates (
- id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT NOT NULL REFERENCES sources(id),
- external_id TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, published_at TEXT,
- description TEXT NOT NULL DEFAULT '', content_hash TEXT NOT NULL,
- collected_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(source_id,external_id)
-);
-CREATE TABLE IF NOT EXISTS articles (
- id INTEGER PRIMARY KEY AUTOINCREMENT, update_id INTEGER NOT NULL UNIQUE REFERENCES updates(id) ON DELETE CASCADE,
- summary TEXT NOT NULL DEFAULT '', what_changed TEXT NOT NULL DEFAULT '', effective_date TEXT,
- who_affected TEXT NOT NULL DEFAULT '', action_needed TEXT NOT NULL DEFAULT '',
- category_ids TEXT NOT NULL DEFAULT '[]',
- status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','sent')),
- reviewed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS sent (
- subscriber_id INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,
- article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
- sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(subscriber_id,article_id)
-);
+ id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT NOT NULL UNIQUE,confirmation_token TEXT NOT NULL UNIQUE,
+ unsubscribe_token TEXT NOT NULL UNIQUE,confirmed INTEGER NOT NULL DEFAULT 0,unsubscribed INTEGER NOT NULL DEFAULT 0,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,confirmed_at TEXT,consent_at TEXT,consent_version TEXT NOT NULL DEFAULT 'draft-1');
+CREATE TABLE IF NOT EXISTS roles(id TEXT PRIMARY KEY,label TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS categories(id TEXT PRIMARY KEY,label TEXT NOT NULL,description TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS subscriber_roles(subscriber_id INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,role_id TEXT NOT NULL REFERENCES roles(id),PRIMARY KEY(subscriber_id,role_id));
+CREATE TABLE IF NOT EXISTS subscriber_categories(subscriber_id INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,category_id TEXT NOT NULL REFERENCES categories(id),PRIMARY KEY(subscriber_id,category_id));
+CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,label TEXT NOT NULL,url TEXT NOT NULL,source_type TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,terms_checked INTEGER NOT NULL DEFAULT 0,last_checked_at TEXT,last_error TEXT);
+CREATE TABLE IF NOT EXISTS updates(id INTEGER PRIMARY KEY AUTOINCREMENT,source_id TEXT NOT NULL REFERENCES sources(id),external_id TEXT NOT NULL,title TEXT NOT NULL,url TEXT NOT NULL,published_at TEXT,description TEXT NOT NULL DEFAULT '',content_hash TEXT NOT NULL,collected_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(source_id,external_id));
+CREATE TABLE IF NOT EXISTS articles(id INTEGER PRIMARY KEY AUTOINCREMENT,update_id INTEGER NOT NULL UNIQUE REFERENCES updates(id) ON DELETE CASCADE,summary TEXT NOT NULL DEFAULT '',what_changed TEXT NOT NULL DEFAULT '',effective_date TEXT,who_affected TEXT NOT NULL DEFAULT '',action_needed TEXT NOT NULL DEFAULT '',category_ids TEXT NOT NULL DEFAULT '[]',status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','sent')),reviewed_at TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS sent(subscriber_id INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(subscriber_id,article_id));
+CREATE TABLE IF NOT EXISTS rate_limits(rate_key TEXT NOT NULL,window_start TEXT NOT NULL,count INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(rate_key,window_start));
+CREATE TABLE IF NOT EXISTS delivery_runs(id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT NOT NULL UNIQUE,status TEXT NOT NULL CHECK(status IN ('queued','completed','partial_failure')),queued_count INTEGER NOT NULL DEFAULT 0,skipped_count INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS delivery_queue(id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT NOT NULL REFERENCES delivery_runs(run_id),subscriber_id INTEGER NOT NULL REFERENCES subscribers(id) ON DELETE CASCADE,article_ids TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sending','sent','failed')),attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at TEXT,sent_at TEXT,last_error TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(run_id,subscriber_id));
+CREATE TABLE IF NOT EXISTS system_locks(lock_name TEXT PRIMARY KEY,lock_token TEXT,lock_until TEXT);
+INSERT OR IGNORE INTO system_locks(lock_name) VALUES('delivery');
 CREATE INDEX IF NOT EXISTS idx_updates_collected ON updates(collected_at);
 CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_subscribers_delivery ON subscribers(confirmed,unsubscribed);
-INSERT OR IGNORE INTO roles(id,label) VALUES
- ('individual','個人・生活者'),('employee','会社員・従業員'),
- ('sole_proprietor','個人事業主・フリーランス'),('corporate_leader','法人経営者・役員'),
- ('hr_labor','人事・労務担当者'),('general_legal','総務・法務担当者'),('other','その他');
-INSERT OR IGNORE INTO categories(id,label,description) VALUES
- ('labor','労働・雇用','労働条件、雇用、職場の安全'),
- ('tax','税金・会計','税制、申告、会計上の変更'),
- ('social_insurance','社会保険・年金','年金、健康保険、給付制度'),
- ('business','事業・取引','許認可、取引、事業者の義務'),
- ('consumer','消費者・契約','契約、表示、消費者保護'),
- ('digital_privacy','デジタル・個人情報','個人情報、情報セキュリティ、電子手続き'),
- ('daily_life','交通・生活','交通、防災、日常生活のルール'),
- ('other','その他の重要制度','ほかのカテゴリに収まらない重要な変更');
-INSERT OR IGNORE INTO sources(id,label,url,source_type,enabled,terms_checked)
- VALUES('digital_rss','デジタル庁 RSS','https://www.digital.go.jp/rss','rss',1,0);
+CREATE INDEX IF NOT EXISTS idx_delivery_queue_pending ON delivery_queue(status,next_attempt_at,id);
+INSERT OR IGNORE INTO roles(id,label) VALUES('individual','個人・生活者'),('employee','会社員・従業員'),('sole_proprietor','個人事業主・フリーランス'),('corporate_leader','法人経営者・役員'),('hr_labor','人事・労務担当者'),('general_legal','総務・法務担当者'),('other','その他');
+INSERT OR IGNORE INTO categories(id,label,description) VALUES('labor','労働・雇用','労働条件、雇用、職場の安全'),('tax','税金・会計','税制、申告、会計上の変更'),('social_insurance','社会保険・年金','年金、健康保険、給付制度'),('business','事業・取引','許認可、取引、事業者の義務'),('consumer','消費者・契約','契約、表示、消費者保護'),('digital_privacy','デジタル・個人情報','個人情報、情報セキュリティ、電子手続き'),('daily_life','交通・生活','交通、防災、日常生活のルール'),('other','その他の重要制度','ほかのカテゴリに収まらない重要な変更');
+INSERT OR IGNORE INTO sources(id,label,url,source_type,enabled,terms_checked) VALUES('digital_rss','デジタル庁 RSS','https://www.digital.go.jp/rss','rss',1,0);
