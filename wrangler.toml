@@ -1,13 +1,9 @@
 name = "legal-change-letter"
-main = "src/index.js"
+main = "index.js"
 compatibility_date = "2026-10-09"
 
-# Before deployment, create a NEW D1 database and uncomment/update this binding.
-# Keep this project isolated from the existing HOJO-LETTER database.
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "legal-change-letter"
-# database_id = "REPLACE_WITH_NEW_DATABASE_ID"
+# 0円MVP prototype. Add a separate D1 binding only after creating a new database.
+# Never point this at the HOJO-LETTER production database.
 
 [triggers]
 crons = []
