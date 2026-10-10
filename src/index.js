@@ -6,11 +6,18 @@ import {sendEmail,escapeHtml} from "./email.js";
 
 const json=(v,status=200)=>new Response(JSON.stringify(v,null,2),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});
 const page=(title,body,status=200)=>new Response('<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escapeHtml(title)+'</title><style>body{font:16px/1.65 system-ui;max-width:760px;margin:30px auto;padding:0 18px}fieldset{margin:16px 0;padding:14px;border:1px solid #aaa;border-radius:10px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}label{display:block;padding:5px}small{display:block;color:#666}input[type=email]{padding:10px;width:min(95%,400px)}button{padding:10px 18px;background:#2563eb;color:white;border:0;border-radius:8px}</style><body>'+body+'</body></html>',{status,headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+function privacyPolicyUrl(env){
+ try{
+  const u=new URL(String(env.PRIVACY_URL||""));
+  if(u.protocol==="https:"&&u.hostname&&!u.username&&!u.password)return u.href;
+ }catch{}
+ return "";
+}
 function landing(env){
  const roles=ROLES.map(r=>'<label><input type="checkbox" name="roles" value="'+r.id+'"> '+escapeHtml(r.label)+'</label>').join("");
  const cats=CATEGORIES.map(x=>'<label class="category"><input type="checkbox" name="categories" value="'+x.id+'"> <span><b>'+escapeHtml(x.label)+'</b><small>'+escapeHtml(x.description)+'</small></span></label>').join("");
  const map=JSON.stringify(Object.fromEntries(ROLES.map(r=>[r.id,recommendCategories([r.id])])));
- const privacyUrl=env.PRIVACY_URL||"";
+ const privacyUrl=privacyPolicyUrl(env);
  const privacy=privacyUrl?'<a href="'+escapeHtml(privacyUrl)+'" target="_blank" rel="noopener noreferrer">プライバシー方針</a>':'<strong>プライバシー方針は公開準備中です</strong>';
  const presets=[
   {id:"life",label:"生活のルール",hint:"契約・交通・年金など",cats:["consumer","daily_life","social_insurance"]},
@@ -52,7 +59,7 @@ async function subscribe(req,env){
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)return json({error:"メールアドレスを確認してください"},400);
  if(!cats.length)return json({error:"カテゴリを1つ以上選択してください"},400);
  if(d.consent!==true)return json({error:"配信への同意が必要です"},400);
- if(!env.PRIVACY_URL||!env.PRIVACY_URL.startsWith("https://"))return json({error:"プライバシー方針の公開URLが未設定のため登録を停止しています"},503);
+ if(!privacyPolicyUrl(env))return json({error:"有効なHTTPSのプライバシー方針URLが未設定のため登録を停止しています"},503);
  try{base(env)}catch{return json({error:"BASE_URL が未設定または不正です。公開環境ではHTTPSのWorker URLを設定してください"},503)}
  const ip=req.headers.get("CF-Connecting-IP")||"unknown";
  if(!(await rateLimit(env,"ip:"+ip,10))||!(await rateLimit(env,"email:"+email,3)))return json({error:"操作回数が上限に達しました。時間をおいて再度お試しください"},429);
