@@ -188,9 +188,13 @@ export async function enqueueWeekly(env,runId=newToken(),limit=50){
    const chosen=new Set((cats.results||[]).map(x=>x.category_id));
    const history=await env.DB.prepare("SELECT article_id FROM sent WHERE subscriber_id=?").bind(person.id).all();
    const sentIds=new Set((history.results||[]).map(x=>x.article_id));
+   // Reserve articles already queued or with unresolved/terminal delivery outcomes across all runs.
+   const prior=await env.DB.prepare("SELECT article_ids FROM delivery_queue WHERE subscriber_id=? AND status IN ('pending','sending','failed')").bind(person.id).all();
+   const reservedIds=new Set();
+   for(const row of prior.results||[]){try{for(const id of JSON.parse(row.article_ids||"[]"))reservedIds.add(id)}catch{}}
    const ids=articles.filter(article=>{
     let categories=[];try{categories=JSON.parse(article.category_ids||"[]")}catch{}
-    return categories.some(id=>chosen.has(id))&&!sentIds.has(article.id);
+    return categories.some(id=>chosen.has(id))&&!sentIds.has(article.id)&&!reservedIds.has(article.id);
    }).map(article=>article.id);
    if(ids.length){
     await env.DB.prepare("INSERT OR IGNORE INTO delivery_queue(run_id,subscriber_id,article_ids,status) VALUES(?,?,?,'pending')").bind(runId,person.id,JSON.stringify(ids)).run();
@@ -223,10 +227,12 @@ export async function drainQueue(env,limit=20){
  if(!lock.meta.changes)return {busy:true,sent:0,errors:0};
  let sent=0,errors=0;
  try{
-  await env.DB.prepare("UPDATE delivery_queue SET status=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,next_attempt_at=CURRENT_TIMESTAMP WHERE status='sending'").run();
+  // A stale 'sending' row may already have been accepted by the provider. Never auto-retry it.
+  // Manual reconciliation is safer than automatically risking a duplicate email.
   const rows=await env.DB.prepare("SELECT q.id,q.subscriber_id,q.article_ids,s.email,s.unsubscribe_token FROM delivery_queue q JOIN subscribers s ON s.id=q.subscriber_id WHERE q.status='pending' AND q.attempts<5 AND (q.next_attempt_at IS NULL OR q.next_attempt_at<=CURRENT_TIMESTAMP) AND s.confirmed=1 AND s.unsubscribed=0 ORDER BY q.id LIMIT ?").bind(limit).all();
   for(const p of rows.results||[]){
    await env.DB.prepare("UPDATE delivery_queue SET status='sending',attempts=attempts+1 WHERE id=? AND status='pending'").bind(p.id).run();
+   let providerAccepted=false;
    try{
     const ids=JSON.parse(p.article_ids),marks=ids.map(()=>"?").join(",");
     const articles=await env.DB.prepare("SELECT a.id,a.summary,a.what_changed,a.effective_date,a.who_affected,a.action_needed,u.title,u.url,u.source_id FROM articles a JOIN updates u ON u.id=a.update_id WHERE a.status='approved' AND a.id IN ("+marks+")").bind(...ids).all();
@@ -234,9 +240,16 @@ export async function drainQueue(env,limit=20){
     const unsub=base(env)+"/unsubscribe?token="+encodeURIComponent(p.unsubscribe_token);
     const html=articles.results.map(x=>{const a=sourceAttribution(x.source_id);return "<article><h2>"+escapeHtml(x.title)+"</h2><p>"+escapeHtml(x.summary)+"</p><p><b>変更点：</b>"+escapeHtml(x.what_changed)+"</p><p><b>施行日：</b>"+escapeHtml(x.effective_date||"原文で確認してください")+"</p><p><b>対象者：</b>"+escapeHtml(x.who_affected)+"</p><p><b>対応：</b>"+escapeHtml(x.action_needed)+"</p><p><a href=\""+escapeHtml(x.url)+"\">公式情報・出典："+escapeHtml(a.label)+"</a></p><p><small>"+escapeHtml(a.note)+"</small></p></article><hr>"}).join("");
     await sendEmail(env,{to:p.email,subject:"【ルール便】今週のルール変更情報",html:"<h1>今週のルール変更情報</h1>"+html+'<p><a href="'+escapeHtml(unsub)+'">配信停止</a></p>',text:articles.results.map(x=>{const a=sourceAttribution(x.source_id);return x.title+"\n"+x.summary+"\n出典: "+a.label+"\n原文: "+x.url+"\n"+a.note}).join("\n\n---\n\n")+"\n配信停止: "+unsub});
+    providerAccepted=true;
     for(const x of articles.results)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(p.subscriber_id,x.id).run();
     await env.DB.prepare("UPDATE delivery_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(p.id).run();sent++;
-   }catch(e){errors++;await env.DB.prepare("UPDATE delivery_queue SET status=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,next_attempt_at=datetime('now','+' || MIN(60,5*attempts) || ' minutes'),last_error=? WHERE id=?").bind(String(e.message||e).slice(0,500),p.id).run();}
+   }catch(e){
+    errors++;
+    const uncertain=providerAccepted||e.deliveryUnknown===true;
+    const status=uncertain||Number(p.attempts)>=5?"failed":"pending";
+    const reason=(uncertain?"delivery-result-uncertain: ":"")+String(e.message||e).slice(0,450);
+    await env.DB.prepare("UPDATE delivery_queue SET status=?,next_attempt_at=CASE WHEN ?='pending' THEN datetime('now','+' || MIN(60,5*attempts) || ' minutes') ELSE next_attempt_at END,last_error=? WHERE id=?").bind(status,status,reason,p.id).run();
+   }
   }
   await env.DB.prepare("UPDATE delivery_runs SET status=CASE WHEN enqueue_complete=0 OR EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status IN ('pending','sending')) THEN 'queued' WHEN EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status='failed') THEN 'partial_failure' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status='queued'").run();
   return {sent,errors,processed:rows.results?.length||0};
