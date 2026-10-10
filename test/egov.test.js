@@ -26,7 +26,7 @@ function mockDb({termsChecked=1}={}){
  }}}}};
  return {DB,updates,articles,sourceUpdates,source};
 }
-const law=(id,date,title=id)=>({law_info:{law_id:id,law_title:"関連法令 "+id,promulgation_date:"2020-01-01"},revision_info:{law_revision_id:id+"_revision",amendment_law_id:id+"_amend",amendment_law_title:title,amendment_promulgate_date:date,amendment_type:"3",mission:"Partial"}});
+const law=(id,date,title=id,opts={})=>({law_info:{law_id:id,law_title:"関連法令 "+id,promulgation_date:"2020-01-01"},revision_info:{law_revision_id:id+"_revision",amendment_law_id:id+"_amend",amendment_law_title:title,amendment_promulgate_date:date,amendment_type:"3",mission:"Partial",...opts}});
 function response(laws,next_offset=null){return new Response(JSON.stringify({laws,count:laws.length,next_offset}),{status:200,headers:{"content-type":"application/json"}})}
 
 test("does not call the API before source terms are confirmed",async()=>{
@@ -46,16 +46,30 @@ test("collects recent amendments, ignores older ones, and groups revisions by am
  assert.equal(result.collected,1);
  assert.equal(result.withinWindow,1);
  assert.equal(updates.length,1);
- assert.equal(updates[0].externalId,"A_amend");
+ assert.equal(updates[0].externalId,"A_revision");
  assert.equal(updates[0].publishedAt,"2026-10-09");
- assert.match(updates[0].url,/laws\.e-gov\.go\.jp\/law\/A_amend$/);
+ assert.match(updates[0].url,/laws\.e-gov\.go\.jp\/law\/A$/);
  assert.equal(articles.length,1);
- assert.equal(urls[0].searchParams.get("order"),"-revision_info.amendment_promulgate_date");
+ assert.equal(urls[0].searchParams.get("order"),null);
  assert.equal(urls[0].searchParams.get("limit"),"100");
 });
 
 
-test("resumes a bounded scan on the next run and resets after reaching older records",async()=>{
+test("does not stop at an old record before later pages",async()=>{
+ const {DB,updates}=mockDb();let calls=0;
+ const result=await collectEgovLawUpdates({DB},{fetchImpl:async url=>{
+  calls++;
+  const offset=Number(new URL(url).searchParams.get("offset"));
+  if(offset===0)return response([law("OLD","2026-09-01","古い改正法")],100);
+  return response([law("RECENT","2026-10-09","最近の改正法")],null);
+ },now:new Date("2026-10-10T12:00:00Z")});
+ assert.equal(calls,2);
+ assert.equal(result.hasMore,false);
+ assert.equal(result.collected,1);
+ assert.equal(updates[0].externalId,"RECENT_revision");
+});
+
+test("resumes a bounded scan and keeps the original cutoff",async()=>{
  const {DB,source}=mockDb();const firstOffsets=[];
  const recent=law("RECENT","2026-10-09","最近の改正法");
  const firstFetch=async url=>{
