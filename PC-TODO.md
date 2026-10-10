@@ -18,6 +18,27 @@ node --check .\src\index.js
 ```
 まだcloneしていない場合は、先に `git clone https://github.com/hs9cghkmpw-alt/legal.git rule-change-letter` を実行してください。
 
+## 実データ応答の確認（読み取り専用）
+本番デプロイやD1書き込みをせず、e-Gov APIとデジタル庁RSSの実応答だけ確認します。
+
+```powershell
+# e-Gov法令API Version 2: 民法の検索例
+$api = 'https://laws.e-gov.go.jp/api/2/laws?law_title=%E6%B0%91%E6%B3%95&limit=1&response_format=json'
+$data = Invoke-RestMethod -Uri $api -Headers @{ Accept = 'application/json' }
+$data | Select-Object total_count, count, next_offset
+$data.laws[0] | ConvertTo-Json -Depth 8
+
+# デジタル庁RSS: HTTPステータスと先頭部分だけ確認
+$feed = Invoke-WebRequest -Uri 'https://www.digital.go.jp/rss/news.xml' -UseBasicParsing
+$feed.StatusCode
+$feed.Content.Substring(0, [Math]::Min(800, $feed.Content.Length))
+```
+
+確認点：
+- e-Gov応答に `laws` 配列があり、`law_info.law_id`、`revision_info`、`current_revision_info` 等がどの形で入るか。
+- RSSがHTTP 200でXMLを返すか。
+- ここで確認しても、利用条件の最終判断が済むまでは `terms_checked=0` のままにする。
+- 結果に個人情報・秘密情報は含まれない想定ですが、出力全体を公開Issueへ貼らず、必要なフィールドだけ確認する。
 ## ローカルDB
 新規ローカルDB：
 ```powershell
