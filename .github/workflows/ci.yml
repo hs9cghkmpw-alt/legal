@@ -14,5 +14,6 @@ jobs:
       - run: npm install
       - run: node --check src/index.js
       - run: node --check src/sources.js
+      - run: node --check src/egov.js
       - run: node --check src/email.js
       - run: npm test
