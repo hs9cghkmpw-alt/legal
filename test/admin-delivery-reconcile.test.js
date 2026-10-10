@@ -16,7 +16,7 @@ function request(body) {
   });
 }
 
-function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0, queueUpdateChanges = 1 } = {}) {
+function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0, queueUpdateChanges = 1, sentInsertError = false, revertError = false, revertChanges = 1 } = {})
   const calls = [];
   return {
     calls,
@@ -33,6 +33,11 @@ function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_id
             },
             async run() {
               calls.push({ sql, args, operation: "run" });
+              if (sql.includes("INTO sent") && sentInsertError) throw new Error("simulated sent insert failure");
+              if (sql.includes("last_error='manual-reconciliation-sent-record-write-failed'")) {
+                if (revertError) throw new Error("simulated revert failure");
+                return { meta: { changes: revertChanges } };
+              }
               return { meta: { changes: sql.startsWith("UPDATE delivery_queue SET status='sent'") ? queueUpdateChanges : 1 } };
             },
             async all() {
@@ -150,4 +155,37 @@ test("mark_sent does not write sent records when the queue state update affects 
   assert.match(body.error, /状態が変わった/);
   assert.equal(DB.calls.filter(call => call.sql.includes("INTO sent")).length, 0);
   assert.equal(DB.calls.filter(call => call.sql.includes("UPDATE delivery_queue SET status='sent'")).length, 1);
+});
+
+
+test("mark_sent reports when sent history insert fails but queue revert succeeds", async () => {
+  const DB = fakeDb({ sentInsertError: true, revertChanges: 1 });
+  const { response, body } = await invoke({
+    queue_id: 7, action: "mark_sent", provider_confirmed_accepted: true,
+  }, DB);
+  assert.equal(response.status, 500);
+  assert.equal(body.queue_id, 7);
+  assert.equal(body.recovery, "queue-reverted-to-failed");
+  assert.match(body.error, /キューは failed に戻しました/);
+  assert.equal(DB.calls.filter(call => call.sql.includes("last_error='manual-reconciliation-sent-record-write-failed'")).length, 1);
+});
+
+test("mark_sent clearly reports when sent history insert and queue revert both fail", async () => {
+  const DB = fakeDb({ sentInsertError: true, revertError: true });
+  const { response, body } = await invoke({
+    queue_id: 7, action: "mark_sent", provider_confirmed_accepted: true,
+  }, DB);
+  assert.equal(response.status, 500);
+  assert.equal(body.queue_id, 7);
+  assert.equal(body.recovery, "manual-database-inspection-required");
+  assert.match(body.error, /自動再試行せず/);
+});
+
+test("mark_sent reports when sent history insert fails and queue revert affects zero rows", async () => {
+  const DB = fakeDb({ sentInsertError: true, revertChanges: 0 });
+  const { response, body } = await invoke({
+    queue_id: 7, action: "mark_sent", provider_confirmed_accepted: true,
+  }, DB);
+  assert.equal(response.status, 500);
+  assert.equal(body.recovery, "manual-database-inspection-required");
 });
