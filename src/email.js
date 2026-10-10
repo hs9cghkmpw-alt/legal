@@ -7,7 +7,7 @@ export async function sendEmail(env,m){
  }catch(error){
   throw Object.assign(new Error("メール送信結果不明: "+String(error?.message||error)),{deliveryUnknown:true});
  }
- if(!r.ok){const message="メール送信失敗: HTTP "+r.status+" "+(await r.text()).slice(0,300);if(r.status>=500)throw Object.assign(new Error("メール送信結果不明: "+message),{deliveryUnknown:true});throw new Error(message)}
+ if(!r.ok){let detail="";try{detail=(await r.text()).slice(0,300)}catch{}const message="メール送信失敗: HTTP "+r.status+" "+detail;if(r.status>=500)throw Object.assign(new Error("メール送信結果不明: "+message),{deliveryUnknown:true});throw new Error(message)}
  return r.json().catch(()=>({}));
 }
 export function escapeHtml(v=""){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
