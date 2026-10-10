@@ -110,24 +110,49 @@ async function approve(req,env){
  return result.meta.changes?json({ok:true,article_id:id,status:"approved"}):json({error:"承認待ち記事が見つかりません"},404);
 }
 
-async function enqueueWeekly(env,runId=newToken()){
- const exists=await env.DB.prepare("SELECT run_id FROM delivery_runs WHERE run_id=?").bind(runId).first();
- if(exists)return {runId,alreadyQueued:true};
- await env.DB.prepare("INSERT INTO delivery_runs(run_id,status,queued_count,skipped_count) VALUES(?,'queued',0,0)").bind(runId).run();
- const a=await env.DB.prepare("SELECT id,category_ids FROM articles WHERE status='approved' ORDER BY id LIMIT 500").all();
- const people=await env.DB.prepare("SELECT id FROM subscribers WHERE confirmed=1 AND unsubscribed=0 ORDER BY id").all();
- let queued=0,skipped=0;
- for(const p of people.results||[]){
-  const c=await env.DB.prepare("SELECT category_id FROM subscriber_categories WHERE subscriber_id=?").bind(p.id).all();
-  const chosen=new Set((c.results||[]).map(x=>x.category_id));
-  const s=await env.DB.prepare("SELECT article_id FROM sent WHERE subscriber_id=?").bind(p.id).all();
-  const sent=new Set((s.results||[]).map(x=>x.article_id));
-  const ids=(a.results||[]).filter(x=>{let cs=[];try{cs=JSON.parse(x.category_ids||"[]")}catch{}return cs.some(y=>chosen.has(y))&&!sent.has(x.id)}).map(x=>x.id);
-  if(!ids.length){skipped++;continue}
-  await env.DB.prepare("INSERT OR IGNORE INTO delivery_queue(run_id,subscriber_id,article_ids,status) VALUES(?,?,?,'pending')").bind(runId,p.id,JSON.stringify(ids)).run();queued++;
+async function enqueueWeekly(env,runId=newToken(),limit=50){
+ let run=await env.DB.prepare("SELECT run_id,enqueue_complete,last_subscriber_id FROM delivery_runs WHERE run_id=?").bind(runId).first();
+ if(!run){
+  await env.DB.prepare("INSERT INTO delivery_runs(run_id,status,queued_count,skipped_count,enqueue_complete,last_subscriber_id) VALUES(?,'queued',0,0,0,0)").bind(runId).run();
+  run={run_id:runId,enqueue_complete:0,last_subscriber_id:0};
  }
- await env.DB.prepare("UPDATE delivery_runs SET queued_count=?,skipped_count=? WHERE run_id=?").bind(queued,skipped,runId).run();
- return {runId,queued,skipped};
+ if(run.enqueue_complete)return {runId,alreadyQueued:true,enqueueComplete:true};
+ const articles=await env.DB.prepare("SELECT id,category_ids FROM articles WHERE status='approved' ORDER BY id LIMIT 500").all();
+ const people=await env.DB.prepare("SELECT id,confirmed,unsubscribed FROM subscribers WHERE id>? ORDER BY id LIMIT ?").bind(run.last_subscriber_id||0,limit).all();
+ let lastId=run.last_subscriber_id||0;
+ for(const person of people.results||[]){
+  lastId=person.id;
+  if(person.confirmed===1&&person.unsubscribed===0){
+   const cats=await env.DB.prepare("SELECT category_id FROM subscriber_categories WHERE subscriber_id=?").bind(person.id).all();
+   const chosen=new Set((cats.results||[]).map(x=>x.category_id));
+   const history=await env.DB.prepare("SELECT article_id FROM sent WHERE subscriber_id=?").bind(person.id).all();
+   const sentIds=new Set((history.results||[]).map(x=>x.article_id));
+   const ids=(articles.results||[]).filter(article=>{
+    let categories=[];try{categories=JSON.parse(article.category_ids||"[]")}catch{}
+    return categories.some(id=>chosen.has(id))&&!sentIds.has(article.id);
+   }).map(article=>article.id);
+   if(ids.length){
+    await env.DB.prepare("INSERT OR IGNORE INTO delivery_queue(run_id,subscriber_id,article_ids,status) VALUES(?,?,?,'pending')").bind(runId,person.id,JSON.stringify(ids)).run();
+   }
+  }
+  await env.DB.prepare("UPDATE delivery_runs SET last_subscriber_id=? WHERE run_id=?").bind(lastId,runId).run();
+ }
+ const more=await env.DB.prepare("SELECT id FROM subscribers WHERE id>? ORDER BY id LIMIT 1").bind(lastId).first();
+ if(!more){
+  const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM delivery_queue WHERE run_id=?").bind(runId).first();
+  const eligible=await env.DB.prepare("SELECT COUNT(*) AS n FROM subscribers WHERE confirmed=1 AND unsubscribed=0").first();
+  const queued=Number(count?.n||0),total=Number(eligible?.n||0);
+  await env.DB.prepare("UPDATE delivery_runs SET enqueue_complete=1,queued_count=?,skipped_count=?,updated_at=CURRENT_TIMESTAMP WHERE run_id=?").bind(queued,Math.max(0,total-queued),runId).run();
+  return {runId,queued,skipped:Math.max(0,total-queued),enqueueComplete:true};
+ }
+ const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM delivery_queue WHERE run_id=?").bind(runId).first();
+ return {runId,queuedSoFar:Number(count?.n||0),lastSubscriberId:lastId,enqueueComplete:false};
+}
+async function continueEnqueues(env){
+ const runs=await env.DB.prepare("SELECT run_id FROM delivery_runs WHERE enqueue_complete=0 ORDER BY id LIMIT 5").all();
+ const results=[];
+ for(const run of runs.results||[])results.push(await enqueueWeekly(env,run.run_id,50));
+ return results;
 }
 async function drainQueue(env,limit=20){
  const lease=newToken();
