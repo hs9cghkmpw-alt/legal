@@ -201,3 +201,14 @@ test("retry reconciliation refuses success when the conditional queue update aff
   assert.equal(DB.calls.filter(call => call.sql.startsWith("UPDATE delivery_queue SET status='pending'")).length, 1);
   assert.equal(DB.calls.filter(call => call.sql.startsWith("UPDATE delivery_runs")).length, 0);
 });
+
+
+test("successful mark_sent reconciliation clears the temporary anomaly marker", async () => {
+  const DB = fakeDb();
+  const { response, body } = await invoke({
+    queue_id: 7, action: "mark_sent", provider_confirmed_accepted: true,
+  }, DB);
+  assert.equal(response.status, 200);
+  assert.equal(body.status, "sent");
+  assert.equal(DB.calls.filter(call => call.sql.startsWith("UPDATE delivery_queue SET last_error=NULL")).length, 1);
+});
