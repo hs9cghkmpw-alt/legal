@@ -115,5 +115,7 @@ test("HTML and JSON responses include baseline security headers", async () => {
     assert.equal(response.headers.get("x-frame-options"), "DENY");
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.match(response.headers.get("permissions-policy"), /camera=\(\)/);
+    assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
+    assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   }
 });
