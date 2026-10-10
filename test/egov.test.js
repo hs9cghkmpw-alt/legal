@@ -83,7 +83,7 @@ test("caps candidate writes per invocation and resumes inside the saved page",as
  const first=await collectEgovLawUpdates({DB},{fetchImpl:async()=>response(laws,null),now:new Date("2026-10-10T12:00:00Z")});
  assert.equal(first.collected,10);
  assert.equal(first.hasMore,true);
- assert.equal(updates.length,15);
+ assert.equal(updates.length,10);
  assert.equal(source.scan_offset,0);
  assert.equal(source.scan_item_offset,15);
  assert.ok(source.scan_page_payload);
