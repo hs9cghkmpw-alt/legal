@@ -37,11 +37,16 @@ test("resubscription removes stale unsent queue rows before rotating tokens",asy
   run:async()=>{queries.push({sql,args});return {meta:{changes:1,last_row_id:7}}},
   all:async()=>({results:[]})
  }}}}};
+ let sentEmail=null;
  const originalFetch=globalThis.fetch;
- globalThis.fetch=async()=>new Response(JSON.stringify({messageId:"test"}),{status:201,headers:{"content-type":"application/json"}});
+ globalThis.fetch=async(_url,options)=>{sentEmail=JSON.parse(options.body);return new Response(JSON.stringify({messageId:"test"}),{status:201,headers:{"content-type":"application/json"}})};
  try{
   const res=await app.fetch(request(valid),{PRIVACY_URL:"https://worker.example/privacy",BASE_URL:"https://worker.example",BREVO_API_KEY:"test",SENDER_EMAIL:"sender@example.jp",DB});
   assert.equal(res.status,202);
+  assert.match(sentEmail.textContent,/確認リンクを開くまで登録・配信は開始されません/);
+  assert.match(sentEmail.textContent,/登録した覚えがない場合は、このメールを無視してください/);
+  assert.match(sentEmail.textContent,/https:\/\/worker\.example\/privacy/);
+  assert.match(sentEmail.htmlContent,/プライバシー方針/);
   const purge=queries.findIndex(x=>x.sql.startsWith("DELETE FROM delivery_queue WHERE subscriber_id=? AND status!='sent'"));
   const rotate=queries.findIndex(x=>x.sql.startsWith("UPDATE subscribers SET confirmation_token="));
   assert.ok(purge>=0,"must delete stale unsent queue entries");
