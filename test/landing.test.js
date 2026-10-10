@@ -31,27 +31,39 @@ test("signup remains visibly and interactively paused until a privacy policy URL
   const response = await worker.fetch(new Request("https://example.test/"), {});
   const html = await response.text();
   assert.match(html, /プライバシー方針は公開準備中です/);
-  assert.match(html, /登録は一時停止中です/);
+  assert.match(html, /必要な準備が完了するまで登録を受け付けません/);
   assert.match(html, /id="submit" disabled/);
   assert.match(html, /name="consent" required disabled/);
 });
 
-test("a configured HTTPS privacy policy enables signup controls and links to the policy", async () => {
+test("a privacy policy URL alone does not enable signup before readiness approval", async () => {
   const response = await worker.fetch(new Request("https://example.test/"), {
     PRIVACY_URL: "https://example.test/privacy"
   });
   const html = await response.text();
   assert.ok(html.includes('href="https://example.test/privacy"'));
+  assert.match(html, /必要な準備が完了するまで登録を受け付けません/);
+  assert.match(html, /id="submit" disabled/);
+});
+
+test("a configured HTTPS privacy policy enables signup controls and links to the policy", async () => {
+  const response = await worker.fetch(new Request("https://example.test/"), {
+    PRIVACY_URL: "https://example.test/privacy",
+    SIGNUP_ENABLED: "true"
+  });
+  const html = await response.text();
+  assert.ok(html.includes('href="https://example.test/privacy"'));
   assert.match(html, /プライバシー方針を確認のうえ登録できます/);
   assert.doesNotMatch(html, /現在は公開準備中です/);
-  assert.doesNotMatch(html, /登録は一時停止中です/);
+  assert.doesNotMatch(html, /必要な準備が完了するまで登録を受け付けません/);
   assert.match(html, /id="submit">確認メールを送る/);
   assert.match(html, /name="consent" required>/);
 });
 
 test("inline onboarding JavaScript is syntactically valid after server rendering", async () => {
   const response = await worker.fetch(new Request("https://example.test/"), {
-    PRIVACY_URL: "https://example.test/privacy"
+    PRIVACY_URL: "https://example.test/privacy",
+    SIGNUP_ENABLED: "true"
   });
   const html = await response.text();
   const script = html.split("<script>")[1]?.split("</script>")[0];
@@ -71,7 +83,7 @@ test("an invalid or non-HTTPS privacy URL does not enable signup", async () => {
   for (const privacyUrl of ["http://example.test/privacy", "https://", "javascript:alert(1)"]) {
     const response = await worker.fetch(new Request("https://example.test/"), { PRIVACY_URL: privacyUrl });
     const html = await response.text();
-    assert.match(html, /登録は一時停止中です/);
+    assert.match(html, /必要な準備が完了するまで登録を受け付けません/);
     assert.match(html, /id="submit" disabled/);
   }
 });
