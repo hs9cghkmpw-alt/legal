@@ -45,3 +45,12 @@ test("inline onboarding JavaScript is syntactically valid after server rendering
   assert.ok(script, "landing page should include its onboarding script");
   assert.doesNotThrow(() => new Function(script));
 });
+
+test("an invalid or non-HTTPS privacy URL does not enable signup", async () => {
+  for (const privacyUrl of ["http://example.test/privacy", "https://", "javascript:alert(1)"]) {
+    const response = await worker.fetch(new Request("https://example.test/"), { PRIVACY_URL: privacyUrl });
+    const html = await response.text();
+    assert.match(html, /登録は一時停止中です/);
+    assert.match(html, /id="submit" disabled/);
+  }
+});
