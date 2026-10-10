@@ -20,7 +20,7 @@ test("landing page gives a low-effort starting choice and explains the service",
   assert.match(html, /複数分野にしたい場合は、下の詳細設定で調整できます/);
   assert.match(html, /確認メールのリンクを開きます/);
   assert.match(html, /ルール便/);
-  assert.match(html, /プライバシー方針と原文確認の運用が整うまで、実際の配信は開始しません/);
+  assert.match(html, /情報源の利用条件と原文確認の運用が整うまで、実際の配信は開始しません/);
   assert.match(html, /id="signup"/);
   assert.match(html, /@media\(max-width:760px\)/);
   assert.match(html, /配信イメージ/);
