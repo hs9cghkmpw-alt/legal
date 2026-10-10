@@ -27,13 +27,31 @@ test("landing page gives a low-effort starting choice and explains the service",
   assert.match(html, /商標・ドメイン等の確認は未実施/);
 });
 
-test("signup remains visibly and interactively paused until a privacy policy URL exists", async () => {
+test("signup remains paused until privacy and operational readiness are approved", async () => {
   const response = await worker.fetch(new Request("https://example.test/"), {});
   const html = await response.text();
   assert.match(html, /プライバシー方針は公開準備中です/);
   assert.match(html, /必要な準備が完了するまで登録を受け付けません/);
   assert.match(html, /id="submit" disabled/);
   assert.match(html, /name="consent" required disabled/);
+});
+
+test("subscription API rejects requests until explicit readiness approval", async () => {
+  const response = await worker.fetch(new Request("https://example.test/api/subscribe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: "person@example.com",
+      categories: ["daily_life"],
+      roles: [],
+      consent: true
+    })
+  }), {
+    PRIVACY_URL: "https://example.test/privacy",
+    BASE_URL: "https://example.test"
+  });
+  assert.equal(response.status, 503);
+  assert.match(await response.text(), /公開準備が完了していないため登録を停止しています/);
 });
 
 test("a privacy policy URL alone does not enable signup before readiness approval", async () => {
