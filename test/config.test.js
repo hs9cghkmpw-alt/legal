@@ -22,7 +22,6 @@ test("subscription fails closed when BASE_URL is missing or unsafe",async()=>{
 });
 
 test("local development may use localhost base URL",async()=>{
- const res=await app.fetch(request(valid),{PRIVACY_URL:"https://worker.example/privacy",BASE_URL:"http://localhost:8787",DB:{prepare(){throw new Error("stop before database work")}}});
- assert.equal(res.status,500);
+ await assert.rejects(()=>app.fetch(request(valid),{PRIVACY_URL:"https://worker.example/privacy",BASE_URL:"http://localhost:8787",DB:{prepare(){throw new Error("stop before database work")}}}),/stop before database work/);
  // The request passed URL validation and reached the database stub.
 });
