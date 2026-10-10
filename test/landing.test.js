@@ -105,3 +105,15 @@ test("an invalid or non-HTTPS privacy URL does not enable signup", async () => {
     assert.match(html, /id="submit" disabled/);
   }
 });
+
+
+test("HTML and JSON responses include baseline security headers", async () => {
+  const html = await app.fetch(new Request("https://worker.example/"), {});
+  const json = await app.fetch(new Request("https://worker.example/api/categories"), {});
+  for (const response of [html, json]) {
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.match(response.headers.get("permissions-policy"), /camera=\(\)/);
+  }
+});
