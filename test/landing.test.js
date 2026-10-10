@@ -13,7 +13,7 @@ test("landing page gives a low-effort starting choice and explains the service",
   assert.match(html, /分野を細かく調整する/);
   assert.match(html, /該当情報がない週は配信しない/);
   assert.match(html, /個別の法律相談/);
-  assert.match(html, /確認メールのリンクを開く/);
+  assert.match(html, /確認メールのリンクを開きます/);
   assert.match(html, /ルール便/);
   assert.match(html, /id="signup"/);
   assert.match(html, /@media\(max-width:760px\)/);
