@@ -16,7 +16,7 @@ function request(body) {
   });
 }
 
-function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0, queueUpdateChanges = 1, sentInsertError = false, revertError = false, revertChanges = 1 } = {}) {
+function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0, queueUpdateChanges = 1, retryQueueUpdateChanges = 1, sentInsertError = false, revertError = false, revertChanges = 1 } = {}) {
   const calls = [];
   return {
     calls,
@@ -38,7 +38,7 @@ function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_id
                 if (revertError) throw new Error("simulated revert failure");
                 return { meta: { changes: revertChanges } };
               }
-              return { meta: { changes: sql.startsWith("UPDATE delivery_queue SET status='sent'") ? queueUpdateChanges : 1 } };
+              return { meta: { changes: sql.startsWith("UPDATE delivery_queue SET status='sent'") ? queueUpdateChanges : sql.startsWith("UPDATE delivery_queue SET status='pending'") ? retryQueueUpdateChanges : 1 } };
             },
             async all() {
               calls.push({ sql, args, operation: "all" });
@@ -188,4 +188,16 @@ test("mark_sent reports when sent history insert fails and queue revert affects 
   }, DB);
   assert.equal(response.status, 500);
   assert.equal(body.recovery, "manual-database-inspection-required");
+});
+
+
+test("retry reconciliation refuses success when the conditional queue update affects no rows", async () => {
+  const DB = fakeDb({ retryQueueUpdateChanges: 0 });
+  const { response, body } = await invoke({
+    queue_id: 7, action: "retry_confirmed_not_sent", provider_confirmed_not_accepted: true,
+  }, DB);
+  assert.equal(response.status, 409);
+  assert.match(body.error, /状態が変わった/);
+  assert.equal(DB.calls.filter(call => call.sql.startsWith("UPDATE delivery_queue SET status='pending'")).length, 1);
+  assert.equal(DB.calls.filter(call => call.sql.startsWith("UPDATE delivery_runs")).length, 0);
 });
