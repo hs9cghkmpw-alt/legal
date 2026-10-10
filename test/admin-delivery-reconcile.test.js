@@ -16,7 +16,7 @@ function request(body) {
   });
 }
 
-function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0, queueUpdateChanges = 1, sentInsertError = false, revertError = false, revertChanges = 1 } = {})
+function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0, queueUpdateChanges = 1, sentInsertError = false, revertError = false, revertChanges = 1 } = {}) {
   const calls = [];
   return {
     calls,
