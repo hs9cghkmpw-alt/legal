@@ -242,6 +242,13 @@ export async function drainQueue(env,limit=20){
     if(!articles.results?.length)throw Error("approved-articles-not-found");
     const unsub=base(env)+"/unsubscribe?token="+encodeURIComponent(p.unsubscribe_token);
     const html=articles.results.map(x=>{const a=sourceAttribution(x.source_id);return "<article><h2>"+escapeHtml(x.title)+"</h2><p>"+escapeHtml(x.summary)+"</p><p><b>変更点：</b>"+escapeHtml(x.what_changed)+"</p><p><b>施行日：</b>"+escapeHtml(x.effective_date||"原文で確認してください")+"</p><p><b>対象者：</b>"+escapeHtml(x.who_affected)+"</p><p><b>対応：</b>"+escapeHtml(x.action_needed)+"</p><p><a href=\""+escapeHtml(x.url)+"\">公式情報・出典："+escapeHtml(a.label)+"</a></p><p><small>"+escapeHtml(a.note)+"</small></p></article><hr>"}).join("");
+    // Recheck immediately before contacting the provider: unsubscribe may have raced with queue claiming or rendering.
+    const active=await env.DB.prepare("SELECT id FROM subscribers WHERE id=? AND confirmed=1 AND unsubscribed=0").bind(p.subscriber_id).first();
+    if(!active){
+     await env.DB.prepare("UPDATE delivery_queue SET status='failed',sending_started_at=NULL,last_error='subscriber-inactive-before-provider-send' WHERE id=? AND status='sending'").bind(p.id).run();
+     errors++;
+     continue;
+    }
     await sendEmail(env,{to:p.email,subject:"【ルール便】今週のルール変更情報",html:"<h1>今週のルール変更情報</h1>"+html+'<p><a href="'+escapeHtml(unsub)+'">配信停止</a></p>',text:articles.results.map(x=>{const a=sourceAttribution(x.source_id);return x.title+"\n"+x.summary+"\n出典: "+a.label+"\n原文: "+x.url+"\n"+a.note}).join("\n\n---\n\n")+"\n配信停止: "+unsub});
     providerAccepted=true;
     for(const x of articles.results)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(p.subscriber_id,x.id).run();
