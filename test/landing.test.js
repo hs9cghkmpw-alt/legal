@@ -6,14 +6,19 @@ test("landing page gives a low-effort starting choice and explains the service",
   const response = await worker.fetch(new Request("https://example.test/"), {});
   const html = await response.text();
   assert.equal(response.status, 200);
-  assert.match(html, /法律や行政制度の変更から/);
-  assert.match(html, /生活のルール/);
-  assert.match(html, /働く人/);
-  assert.match(html, /事業・会社/);
-  assert.match(html, /受け取る分野を細かく調整する/);
-  assert.match(html, /該当情報がない週は配信しません/);
+  assert.match(html, /法律や制度の変化を/);
+  assert.match(html, /暮らしのこと/);
+  assert.match(html, /働くこと/);
+  assert.match(html, /事業・会社のこと/);
+  assert.match(html, /分野を細かく調整する/);
+  assert.match(html, /該当情報がない週は配信しない/);
   assert.match(html, /個別の法律相談/);
   assert.match(html, /確認メールのリンクを開く/);
+  assert.match(html, /ルール便/);
+  assert.match(html, /id="signup"/);
+  assert.match(html, /@media\(max-width:760px\)/);
+  assert.match(html, /配信イメージ/);
+  assert.match(html, /商標・ドメイン等の確認は未実施/);
 });
 
 test("signup remains visibly and interactively paused until a privacy policy URL exists", async () => {
