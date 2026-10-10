@@ -301,7 +301,8 @@ async function reconcileDelivery(req,env){
    const age=await env.DB.prepare("SELECT CASE WHEN sending_started_at IS NOT NULL AND datetime(sending_started_at)<=datetime('now','-20 minutes') THEN 1 ELSE 0 END AS old_enough FROM delivery_queue WHERE id=?").bind(id).first();
    if(Number(age?.old_enough)!==1)return json({error:"sending は開始から20分以上経過した行だけ再試行できます。Workerの停止と事業者ログも確認してください"},409);
   }
-  await env.DB.prepare("UPDATE delivery_queue SET status='pending',attempts=0,next_attempt_at=CURRENT_TIMESTAMP,sending_started_at=NULL,last_error='manual-retry-confirmed-not-sent' WHERE id=? AND status IN ('sending','failed')").bind(id).run();
+  const retried=await env.DB.prepare("UPDATE delivery_queue SET status='pending',attempts=0,next_attempt_at=CURRENT_TIMESTAMP,sending_started_at=NULL,last_error='manual-retry-confirmed-not-sent' WHERE id=? AND status IN ('sending','failed')").bind(id).run();
+  if(Number(retried.meta?.changes)!==1)return json({error:"配信キューの状態が変わったため再試行設定を中止しました。最新状態を再確認してください"},409);
  }
  await env.DB.prepare("UPDATE delivery_runs SET status=CASE WHEN enqueue_complete=0 OR EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status IN ('pending','sending')) THEN 'queued' WHEN EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status='failed') THEN 'partial_failure' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE run_id=?").bind(q.run_id).run();
  return json({ok:true,queue_id:id,action,status:action==="mark_sent"?"sent":"pending",note:"事業者側の配信ログを確認した記録を運用ログにも残してください。"});
