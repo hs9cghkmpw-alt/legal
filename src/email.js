@@ -3,7 +3,7 @@ export async function sendEmail(env,m){
  if(!env.SENDER_EMAIL||env.SENDER_EMAIL.includes("replace-with-"))throw new Error("SENDER_EMAIL を認証済み送信元に設定してください");
  let r;
  try{
-  r=await fetch("https://api.brevo.com/v3/smtp/email",{method:"POST",headers:{"accept":"application/json","api-key":env.BREVO_API_KEY,"content-type":"application/json"},body:JSON.stringify({sender:{name:env.SENDER_NAME||"ルール変更レター",email:env.SENDER_EMAIL},to:[{email:m.to}],subject:m.subject,htmlContent:m.html,textContent:m.text})});
+  r=await fetch("https://api.brevo.com/v3/smtp/email",{method:"POST",headers:{"accept":"application/json","api-key":env.BREVO_API_KEY,"content-type":"application/json"},body:JSON.stringify({sender:{name:env.SENDER_NAME||"ルール変更レター",email:env.SENDER_EMAIL},to:[{email:m.to}],subject:m.subject,htmlContent:m.html,textContent:m.text}),signal:AbortSignal.timeout(15000)});
  }catch(error){
   throw Object.assign(new Error("メール送信結果不明: "+String(error?.message||error)),{deliveryUnknown:true});
  }
