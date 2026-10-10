@@ -4,8 +4,9 @@ import {collectEgovLawUpdates} from "../src/egov.js";
 
 function mockDb({termsChecked=1}={}){
  const updates=[],articles=[],sourceUpdates=[];
+ const source={id:"egov_law_api",url:"https://laws.e-gov.go.jp/api/2/laws",terms_checked:termsChecked,scan_offset:0,scan_cutoff:null};
  const DB={prepare(sql){return {bind(...args){return {
-  first:async()=>sql.includes("FROM sources WHERE id=?")?{id:"egov_law_api",url:"https://laws.e-gov.go.jp/api/2/laws",terms_checked:termsChecked}:null,
+  first:async()=>sql.includes("FROM sources WHERE id=?")?source:null,
   run:async()=>{
    if(sql.startsWith("INSERT OR IGNORE INTO updates")){
     const [sourceId,externalId,title,url,publishedAt,description,contentHash]=args;
@@ -15,11 +16,15 @@ function mockDb({termsChecked=1}={}){
    if(sql.startsWith("INSERT OR IGNORE INTO articles")){
     articles.push(args);return {meta:{changes:1}};
    }
-   if(sql.startsWith("UPDATE sources SET last_checked_at"))sourceUpdates.push(args);
+   if(sql.startsWith("UPDATE sources SET scan_offset=0")){
+    source.scan_offset=0;source.scan_cutoff=null;sourceUpdates.push(args);
+   }else if(sql.startsWith("UPDATE sources SET scan_offset=?")){
+    source.scan_offset=args[0];source.scan_cutoff=args[1];sourceUpdates.push(args);
+   }
    return {meta:{changes:1}};
   }
  }}}}};
- return {DB,updates,articles,sourceUpdates};
+ return {DB,updates,articles,sourceUpdates,source};
 }
 const law=(id,date,title=id)=>({law_info:{law_id:id,law_title:"関連法令 "+id,promulgation_date:"2020-01-01"},revision_info:{law_revision_id:id+"_revision",amendment_law_id:id+"_amend",amendment_law_title:title,amendment_promulgate_date:date,amendment_type:"3",mission:"Partial"}});
 function response(laws,next_offset=null){return new Response(JSON.stringify({laws,count:laws.length,next_offset}),{status:200,headers:{"content-type":"application/json"}})}
@@ -47,6 +52,34 @@ test("collects recent amendments, ignores older ones, and groups revisions by am
  assert.equal(articles.length,1);
  assert.equal(urls[0].searchParams.get("order"),"-revision_info.amendment_promulgate_date");
  assert.equal(urls[0].searchParams.get("limit"),"100");
+});
+
+
+test("resumes a bounded scan on the next run and resets after reaching older records",async()=>{
+ const {DB,source}=mockDb();const firstOffsets=[];
+ const recent=law("RECENT","2026-10-09","最近の改正法");
+ const firstFetch=async url=>{
+  const u=new URL(url);firstOffsets.push(Number(u.searchParams.get("offset")));
+  return response([recent],Number(u.searchParams.get("offset"))+100);
+ };
+ const first=await collectEgovLawUpdates({DB},{fetchImpl:firstFetch,now:new Date("2026-10-10T12:00:00Z")});
+ assert.equal(first.pages,10);
+ assert.equal(first.hasMore,true);
+ assert.equal(first.nextOffset,1000);
+ assert.equal(source.scan_offset,1000);
+ assert.equal(source.scan_cutoff,"2026-10-03");
+ assert.deepEqual(firstOffsets,[0,100,200,300,400,500,600,700,800,900]);
+
+ let resumedOffset=null;
+ const second=await collectEgovLawUpdates({DB},{fetchImpl:async url=>{
+  resumedOffset=Number(new URL(url).searchParams.get("offset"));
+  return response([law("OLD","2026-09-01","古い改正法")],null);
+ },now:new Date("2026-10-11T12:00:00Z")});
+ assert.equal(resumedOffset,1000);
+ assert.equal(second.cutoff,"2026-10-03","resume keeps the original scan window");
+ assert.equal(second.hasMore,false);
+ assert.equal(source.scan_offset,0);
+ assert.equal(source.scan_cutoff,null);
 });
 
 test("fails closed when API response is malformed or unavailable",async()=>{
