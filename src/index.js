@@ -63,7 +63,8 @@ async function subscribe(req,env){
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)return json({error:"メールアドレスを確認してください"},400);
  if(!cats.length)return json({error:"カテゴリを1つ以上選択してください"},400);
  if(d.consent!==true)return json({error:"配信への同意が必要です"},400);
- if(!privacyPolicyUrl(env)||String(env.SIGNUP_ENABLED||"").toLowerCase()!=="true")return json({error:"公開準備が完了していないため登録を停止しています"},503);
+ if(!privacyPolicyUrl(env))return json({error:"有効なHTTPSのプライバシー方針URLが未設定のため登録を停止しています"},503);
+ if(String(env.SIGNUP_ENABLED||"").toLowerCase()!=="true")return json({error:"公開準備が完了していないため登録を停止しています"},503);
  try{base(env)}catch{return json({error:"BASE_URL が未設定または不正です。公開環境ではHTTPSのWorker URLを設定してください"},503)}
  const ip=req.headers.get("CF-Connecting-IP")||"unknown";
  if(!(await rateLimit(env,"ip:"+ip,10))||!(await rateLimit(env,"email:"+email,3)))return json({error:"操作回数が上限に達しました。時間をおいて再度お試しください"},429);
