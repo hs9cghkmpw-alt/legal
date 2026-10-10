@@ -92,6 +92,17 @@ async function collectAllSources(env){
  }
  return results;
 }
+async function resumeEgovScanIfNeeded(env){
+ const source=await env.DB.prepare("SELECT scan_offset,terms_checked FROM sources WHERE id='egov_law_api' AND enabled=1").first();
+ if(!source||!source.terms_checked||!Number(source.scan_offset||0))return {skipped:true};
+ try{return await collectEgovLawUpdates(env)}
+ catch(e){
+  const message=String(e.message||e).slice(0,500);
+  await env.DB.prepare("UPDATE sources SET last_error=? WHERE id='egov_law_api'").bind(message).run();
+  console.error("e-Gov continuation failed",e);
+  return {error:message};
+ }
+}
 async function collect(req,env){
  if(!isAdmin(req,env))return denied();
  const results=await collectAllSources(env);
@@ -221,7 +232,7 @@ export default {
   ctx.waitUntil((async()=>{
    if(event.cron==="0 22 * * *"){try{await env.DB.prepare("DELETE FROM rate_limits WHERE julianday(window_start)<julianday('now','-48 hours')").run();await collectAllSources(env)}catch(e){console.error(e)}}
    else if(event.cron==="0 23 * * SUN"){try{await enqueueWeekly(env,"weekly-"+new Date().toISOString().slice(0,10))}catch(e){console.error(e)}}
-   else if(event.cron==="*/10 * * * *"){try{await continueEnqueues(env);await drainQueue(env,20)}catch(e){console.error(e)}}
+   else if(event.cron==="*/10 * * * *"){try{await resumeEgovScanIfNeeded(env);await continueEnqueues(env);await drainQueue(env,20)}catch(e){console.error(e)}}
   })());
  }
 };
