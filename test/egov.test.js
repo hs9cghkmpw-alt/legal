@@ -4,7 +4,7 @@ import {collectEgovLawUpdates} from "../src/egov.js";
 
 function mockDb({termsChecked=1}={}){
  const updates=[],articles=[],sourceUpdates=[];
- const source={id:"egov_law_api",url:"https://laws.e-gov.go.jp/api/2/laws",terms_checked:termsChecked,scan_offset:0,scan_cutoff:null};
+ const source={id:"egov_law_api",url:"https://laws.e-gov.go.jp/api/2/laws",terms_checked:termsChecked,scan_offset:0,scan_cutoff:null,scan_page_payload:null,scan_item_offset:0};
  const DB={prepare(sql){return {bind(...args){return {
   first:async()=>sql.includes("FROM sources WHERE id=?")?source:null,
   run:async()=>{
@@ -17,9 +17,12 @@ function mockDb({termsChecked=1}={}){
     articles.push(args);return {meta:{changes:1}};
    }
    if(sql.startsWith("UPDATE sources SET scan_offset=0")){
-    source.scan_offset=0;source.scan_cutoff=null;sourceUpdates.push(args);
+    source.scan_offset=0;source.scan_cutoff=null;source.scan_page_payload=null;source.scan_item_offset=0;sourceUpdates.push(args);
    }else if(sql.startsWith("UPDATE sources SET scan_offset=?")){
-    source.scan_offset=args[0];source.scan_cutoff=args[1];sourceUpdates.push(args);
+    source.scan_offset=args[0];source.scan_cutoff=args[1];
+    if(sql.includes("scan_page_payload=?")){source.scan_page_payload=args[2];source.scan_item_offset=args[3]}
+    else{source.scan_page_payload=null;source.scan_item_offset=0}
+    sourceUpdates.push(args);
    }
    return {meta:{changes:1}};
   }
@@ -44,7 +47,7 @@ test("collects recent amendments, ignores older ones, and groups revisions by am
  ])};
  const result=await collectEgovLawUpdates({DB},{fetchImpl,now:new Date("2026-10-10T12:00:00Z")});
  assert.equal(result.collected,1);
- assert.equal(result.withinWindow,1);
+ assert.equal(result.withinWindow,2);
  assert.equal(updates.length,1);
  assert.equal(updates[0].externalId,"A_revision");
  assert.equal(updates[0].publishedAt,"2026-10-09");
@@ -56,44 +59,45 @@ test("collects recent amendments, ignores older ones, and groups revisions by am
 
 
 test("does not stop at an old record before later pages",async()=>{
- const {DB,updates}=mockDb();let calls=0;
- const result=await collectEgovLawUpdates({DB},{fetchImpl:async url=>{
-  calls++;
-  const offset=Number(new URL(url).searchParams.get("offset"));
-  if(offset===0)return response([law("OLD","2026-09-01","古い改正法")],100);
-  return response([law("RECENT","2026-10-09","最近の改正法")],null);
+ const {DB,updates,source}=mockDb();
+ const first=await collectEgovLawUpdates({DB},{fetchImpl:async url=>{
+  assert.equal(new URL(url).searchParams.get("offset"),"0");
+  return response([law("OLD","2026-09-01","古い改正法")],100);
  },now:new Date("2026-10-10T12:00:00Z")});
- assert.equal(calls,2);
- assert.equal(result.hasMore,false);
- assert.equal(result.collected,1);
+ assert.equal(first.hasMore,true);
+ assert.equal(first.collected,0);
+ assert.equal(source.scan_offset,100);
+
+ const second=await collectEgovLawUpdates({DB},{fetchImpl:async url=>{
+  assert.equal(new URL(url).searchParams.get("offset"),"100");
+  return response([law("RECENT","2026-10-09","最近の改正法")],null);
+ },now:new Date("2026-10-11T12:00:00Z")});
+ assert.equal(second.hasMore,false);
+ assert.equal(second.collected,1);
  assert.equal(updates[0].externalId,"RECENT_revision");
 });
 
-test("resumes a bounded scan and keeps the original cutoff",async()=>{
- const {DB,source}=mockDb();const firstOffsets=[];
- const recent=law("RECENT","2026-10-09","最近の改正法");
- const firstFetch=async url=>{
-  const u=new URL(url);firstOffsets.push(Number(u.searchParams.get("offset")));
-  return response([recent],Number(u.searchParams.get("offset"))+100);
- };
- const first=await collectEgovLawUpdates({DB},{fetchImpl:firstFetch,now:new Date("2026-10-10T12:00:00Z")});
- assert.equal(first.pages,10);
+test("caps candidate writes per invocation and resumes inside the saved page",async()=>{
+ const {DB,source,updates}=mockDb();
+ const laws=Array.from({length:20},(_,i)=>law("LAW"+i,"2026-10-09","改正法"+i));
+ const first=await collectEgovLawUpdates({DB},{fetchImpl:async()=>response(laws,null),now:new Date("2026-10-10T12:00:00Z")});
+ assert.equal(first.collected,15);
  assert.equal(first.hasMore,true);
- assert.equal(first.nextOffset,1000);
- assert.equal(source.scan_offset,1000);
- assert.equal(source.scan_cutoff,"2026-10-03");
- assert.deepEqual(firstOffsets,[0,100,200,300,400,500,600,700,800,900]);
+ assert.equal(updates.length,15);
+ assert.equal(source.scan_offset,0);
+ assert.equal(source.scan_item_offset,15);
+ assert.ok(source.scan_page_payload);
 
- let resumedOffset=null;
- const second=await collectEgovLawUpdates({DB},{fetchImpl:async url=>{
-  resumedOffset=Number(new URL(url).searchParams.get("offset"));
-  return response([law("OLD","2026-09-01","古い改正法")],null);
- },now:new Date("2026-10-11T12:00:00Z")});
- assert.equal(resumedOffset,1000);
- assert.equal(second.cutoff,"2026-10-03","resume keeps the original scan window");
+ let calls=0;
+ const second=await collectEgovLawUpdates({DB},{fetchImpl:async()=>{calls++;throw Error("saved page should be reused")},now:new Date("2026-10-11T12:00:00Z")});
+ assert.equal(calls,0);
+ assert.equal(second.collected,5);
  assert.equal(second.hasMore,false);
+ assert.equal(updates.length,20);
  assert.equal(source.scan_offset,0);
  assert.equal(source.scan_cutoff,null);
+ assert.equal(source.scan_page_payload,null);
+ assert.equal(source.scan_item_offset,0);
 });
 
 test("fails closed when API response is malformed or unavailable",async()=>{
