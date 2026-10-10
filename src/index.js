@@ -111,13 +111,15 @@ async function approve(req,env){
 }
 
 export async function enqueueWeekly(env,runId=newToken(),limit=50){
- let run=await env.DB.prepare("SELECT run_id,enqueue_complete,last_subscriber_id FROM delivery_runs WHERE run_id=?").bind(runId).first();
+ let run=await env.DB.prepare("SELECT run_id,enqueue_complete,last_subscriber_id,article_snapshot FROM delivery_runs WHERE run_id=?").bind(runId).first();
  if(!run){
-  await env.DB.prepare("INSERT INTO delivery_runs(run_id,status,queued_count,skipped_count,enqueue_complete,last_subscriber_id) VALUES(?,'queued',0,0,0,0)").bind(runId).run();
-  run={run_id:runId,enqueue_complete:0,last_subscriber_id:0};
+  const snapshot=await env.DB.prepare("SELECT id,category_ids FROM articles WHERE status='approved' ORDER BY id LIMIT 500").all();
+  const articleSnapshot=JSON.stringify(snapshot.results||[]);
+  await env.DB.prepare("INSERT INTO delivery_runs(run_id,status,queued_count,skipped_count,enqueue_complete,last_subscriber_id,article_snapshot) VALUES(?,'queued',0,0,0,0,?)").bind(runId,articleSnapshot).run();
+  run={run_id:runId,enqueue_complete:0,last_subscriber_id:0,article_snapshot:articleSnapshot};
  }
  if(run.enqueue_complete)return {runId,alreadyQueued:true,enqueueComplete:true};
- const articles=await env.DB.prepare("SELECT id,category_ids FROM articles WHERE status='approved' ORDER BY id LIMIT 500").all();
+ let articles=[];try{articles=JSON.parse(run.article_snapshot||"[]")}catch{}
  const people=await env.DB.prepare("SELECT id,confirmed,unsubscribed FROM subscribers WHERE id>? ORDER BY id LIMIT ?").bind(run.last_subscriber_id||0,limit).all();
  let lastId=run.last_subscriber_id||0;
  for(const person of people.results||[]){
@@ -127,7 +129,7 @@ export async function enqueueWeekly(env,runId=newToken(),limit=50){
    const chosen=new Set((cats.results||[]).map(x=>x.category_id));
    const history=await env.DB.prepare("SELECT article_id FROM sent WHERE subscriber_id=?").bind(person.id).all();
    const sentIds=new Set((history.results||[]).map(x=>x.article_id));
-   const ids=(articles.results||[]).filter(article=>{
+   const ids=articles.filter(article=>{
     let categories=[];try{categories=JSON.parse(article.category_ids||"[]")}catch{}
     return categories.some(id=>chosen.has(id))&&!sentIds.has(article.id);
    }).map(article=>article.id);
