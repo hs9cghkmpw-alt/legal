@@ -1,7 +1,12 @@
 export async function sendEmail(env,m){
  if(!env.BREVO_API_KEY)throw new Error("BREVO_API_KEY が未設定です");
  if(!env.SENDER_EMAIL||env.SENDER_EMAIL.includes("replace-with-"))throw new Error("SENDER_EMAIL を認証済み送信元に設定してください");
- const r=await fetch("https://api.brevo.com/v3/smtp/email",{method:"POST",headers:{"accept":"application/json","api-key":env.BREVO_API_KEY,"content-type":"application/json"},body:JSON.stringify({sender:{name:env.SENDER_NAME||"ルール変更レター",email:env.SENDER_EMAIL},to:[{email:m.to}],subject:m.subject,htmlContent:m.html,textContent:m.text})});
+ let r;
+ try{
+  r=await fetch("https://api.brevo.com/v3/smtp/email",{method:"POST",headers:{"accept":"application/json","api-key":env.BREVO_API_KEY,"content-type":"application/json"},body:JSON.stringify({sender:{name:env.SENDER_NAME||"ルール変更レター",email:env.SENDER_EMAIL},to:[{email:m.to}],subject:m.subject,htmlContent:m.html,textContent:m.text})});
+ }catch(error){
+  throw Object.assign(new Error("メール送信結果不明: "+String(error?.message||error)),{deliveryUnknown:true});
+ }
  if(!r.ok)throw new Error("メール送信失敗: HTTP "+r.status+" "+(await r.text()).slice(0,300));
  return r.json().catch(()=>({}));
 }
