@@ -14,7 +14,7 @@ test("subscription fails closed when public privacy URL is missing",async()=>{
 });
 
 test("subscription fails closed when BASE_URL is missing or unsafe",async()=>{
- for(const base of ["","http://worker.example","javascript:alert(1)"]){
+ for(const base of ["","http://worker.example","javascript:alert(1)","https://worker.example/path","https://user:pass@worker.example"]){
   const res=await app.fetch(request(valid),{PRIVACY_URL:"https://worker.example/privacy",BASE_URL:base,DB:{prepare(){throw new Error("DB must not be touched")}}});
   assert.equal(res.status,503,base||"(missing)");
   assert.match((await res.json()).error,/BASE_URL/);
