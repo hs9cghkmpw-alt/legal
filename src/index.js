@@ -1,6 +1,7 @@
 import {ROLES,CATEGORIES,recommendCategories} from "./categories.js";
 import {collectDigitalRss} from "./sources.js";
 import {collectEgovLawUpdates} from "./egov.js";
+import {sourceAttribution} from "./attribution.js";
 import {sendEmail,escapeHtml} from "./email.js";
 
 const json=(v,status=200)=>new Response(JSON.stringify(v,null,2),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});
@@ -191,11 +192,11 @@ async function drainQueue(env,limit=20){
    await env.DB.prepare("UPDATE delivery_queue SET status='sending',attempts=attempts+1 WHERE id=? AND status='pending'").bind(p.id).run();
    try{
     const ids=JSON.parse(p.article_ids),marks=ids.map(()=>"?").join(",");
-    const articles=await env.DB.prepare("SELECT a.id,a.summary,a.what_changed,a.effective_date,a.who_affected,a.action_needed,u.title,u.url FROM articles a JOIN updates u ON u.id=a.update_id WHERE a.status='approved' AND a.id IN ("+marks+")").bind(...ids).all();
+    const articles=await env.DB.prepare("SELECT a.id,a.summary,a.what_changed,a.effective_date,a.who_affected,a.action_needed,u.title,u.url,u.source_id FROM articles a JOIN updates u ON u.id=a.update_id WHERE a.status='approved' AND a.id IN ("+marks+")").bind(...ids).all();
     if(!articles.results?.length)throw Error("approved-articles-not-found");
     const unsub=base(env)+"/unsubscribe?token="+encodeURIComponent(p.unsubscribe_token);
-    const html=articles.results.map(x=>"<article><h2>"+escapeHtml(x.title)+"</h2><p>"+escapeHtml(x.summary)+"</p><p><b>変更点：</b>"+escapeHtml(x.what_changed)+"</p><p><b>施行日：</b>"+escapeHtml(x.effective_date||"原文で確認してください")+"</p><p><b>対象者：</b>"+escapeHtml(x.who_affected)+"</p><p><b>対応：</b>"+escapeHtml(x.action_needed)+"</p><p><a href=\""+escapeHtml(x.url)+"\">公式情報</a></p></article><hr>").join("");
-    await sendEmail(env,{to:p.email,subject:"【ルール変更レター】今週のルール変更情報",html:"<h1>今週のルール変更情報</h1>"+html+'<p><a href="'+escapeHtml(unsub)+'">配信停止</a></p>',text:articles.results.map(x=>x.title+"\n"+x.summary+"\n"+x.url).join("\n\n---\n\n")+"\n配信停止: "+unsub});
+    const html=articles.results.map(x=>{const a=sourceAttribution(x.source_id);return "<article><h2>"+escapeHtml(x.title)+"</h2><p>"+escapeHtml(x.summary)+"</p><p><b>変更点：</b>"+escapeHtml(x.what_changed)+"</p><p><b>施行日：</b>"+escapeHtml(x.effective_date||"原文で確認してください")+"</p><p><b>対象者：</b>"+escapeHtml(x.who_affected)+"</p><p><b>対応：</b>"+escapeHtml(x.action_needed)+"</p><p><a href=\""+escapeHtml(x.url)+"\">公式情報・出典："+escapeHtml(a.label)+"</a></p><p><small>"+escapeHtml(a.note)+"</small></p></article><hr>"}).join("");
+    await sendEmail(env,{to:p.email,subject:"【ルール変更レター】今週のルール変更情報",html:"<h1>今週のルール変更情報</h1>"+html+'<p><a href="'+escapeHtml(unsub)+'">配信停止</a></p>',text:articles.results.map(x=>{const a=sourceAttribution(x.source_id);return x.title+"\n"+x.summary+"\n出典: "+a.label+"\n原文: "+x.url+"\n"+a.note}).join("\n\n---\n\n")+"\n配信停止: "+unsub});
     for(const x of articles.results)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(p.subscriber_id,x.id).run();
     await env.DB.prepare("UPDATE delivery_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(p.id).run();sent++;
    }catch(e){errors++;await env.DB.prepare("UPDATE delivery_queue SET status=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,next_attempt_at=datetime('now','+' || MIN(60,5*attempts) || ' minutes'),last_error=? WHERE id=?").bind(String(e.message||e).slice(0,500),p.id).run();}
