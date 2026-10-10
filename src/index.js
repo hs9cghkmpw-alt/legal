@@ -215,7 +215,7 @@ async function continueEnqueues(env){
  for(const run of runs.results||[])results.push(await enqueueWeekly(env,run.run_id,50));
  return results;
 }
-async function drainQueue(env,limit=20){
+export async function drainQueue(env,limit=20){
  // Defense in depth: queued messages must not be sent while readiness is disabled.
  if(String(env.SIGNUP_ENABLED||"").toLowerCase()!=="true")return {skipped:true,sent:0,errors:0,reason:"service-not-ready"};
  const lease=newToken();
