@@ -10,7 +10,6 @@ database_id = "REPLACE_WITH_D1_DATABASE_ID"
 crons = ["0 22 * * *", "0 23 * * SUN", "*/10 * * * *"]
 [vars]
 SERVICE_NAME = "ルール変更レター"
-BASE_URL = "http://localhost:8787"
 SENDER_NAME = "ルール変更レター"
 SENDER_EMAIL = "replace-with-verified-sender@example.com"
 PRIVACY_URL = ""
