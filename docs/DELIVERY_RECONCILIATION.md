@@ -4,7 +4,7 @@
 
 ## 1. 未解決キューを確認
 
-- GET /api/admin/delivery-issues — sending / failed の最大100件を表示します。
+- GET /api/admin/delivery-issues — sending / failed に加え、配信済み履歴の保存異常を疑う行（status=sent かつ last_error=manually-confirmed-provider-accepted）を最大100件表示します。後者は通常の照合APIで操作できないため、DBを手動確認してください。
 - POST /api/admin/reconcile-delivery — 事業者ログの確認後に限り、1件ずつ確定または再試行します。
 - 管理者トークンは安全な環境変数 ADMIN_TOKEN から読み込み、コマンド履歴やログへ直接記載しないでください。
 
@@ -35,5 +35,6 @@ POST /api/admin/reconcile-delivery に次のJSONを送信します。
 - ADMIN_TOKEN は32文字以上の秘密値とし、公開URL・ソースコード・ログ・チャットに貼り付けないこと。
 - 管理APIはHTTPSでのみ利用すること（localhostのローカル検証を除く）。
 - この機能は事業者ログを自動取得しません。管理者が事業者側ログを確認して判断します。
+- 手動で sent に確定した後、`sent` 履歴の書き込みに失敗すると、APIは HTTP 500 と復旧状態を返します。キューの failed への復旧に失敗した場合は、一覧APIで異常候補を検知できるようにしています。ただしDB障害などで一覧API自体も利用できない場合があるため、エラー発生時はDBを直接確認してください。異常候補を確認したら自動再試行せず、`delivery_queue` と `sent` の整合性を管理者が確認してください。
 - メール事業者とD1間の分散トランザクションはないため、厳密な exactly-once 配信は保証できません。
 - 現在は未デプロイです。schema.sql は新規ローカルDB向けであり、既存DBに直接再実行しないでください。既存DBへ適用する場合は別途レビュー済みの移行SQLが必要です。
