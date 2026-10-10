@@ -1,5 +1,6 @@
 import {ROLES,CATEGORIES,recommendCategories} from "./categories.js";
 import {collectDigitalRss} from "./sources.js";
+import {collectEgovLawUpdates} from "./egov.js";
 import {sendEmail,escapeHtml} from "./email.js";
 
 const json=(v,status=200)=>new Response(JSON.stringify(v,null,2),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});
@@ -82,9 +83,20 @@ async function unsubscribe(req,url,env){
  await env.DB.prepare("DELETE FROM delivery_queue WHERE subscriber_id=? AND status='pending'").bind(subscriber.id).run();
  return page("配信停止","<h1>配信を停止しました</h1>");
 }
+async function collectAllSources(env){
+ const sources=[["digital_rss",()=>collectDigitalRss(env)],["egov_law_api",()=>collectEgovLawUpdates(env)]];
+ const results={};
+ for(const [id,run] of sources){
+  try{results[id]=await run()}
+  catch(e){const message=String(e.message||e).slice(0,500);await env.DB.prepare("UPDATE sources SET last_error=? WHERE id=?").bind(message,id).run();results[id]={error:message}}
+ }
+ return results;
+}
 async function collect(req,env){
  if(!isAdmin(req,env))return denied();
- try{return json(await collectDigitalRss(env))}catch(e){await env.DB.prepare("UPDATE sources SET last_error=? WHERE id='digital_rss'").bind(String(e.message||e).slice(0,500)).run();return json({error:String(e.message||e)},502)}
+ const results=await collectAllSources(env);
+ const failed=Object.values(results).some(x=>x&&x.error);
+ return json(results,failed?502:200);
 }
 async function listUpdates(req,env){
  if(!isAdmin(req,env))return denied();
@@ -207,7 +219,7 @@ export default {
  },
  async scheduled(event,env,ctx){
   ctx.waitUntil((async()=>{
-   if(event.cron==="0 22 * * *"){try{await env.DB.prepare("DELETE FROM rate_limits WHERE julianday(window_start)<julianday('now','-48 hours')").run();await collectDigitalRss(env)}catch(e){await env.DB.prepare("UPDATE sources SET last_error=? WHERE id='digital_rss'").bind(String(e.message||e).slice(0,500)).run();console.error(e)}}
+   if(event.cron==="0 22 * * *"){try{await env.DB.prepare("DELETE FROM rate_limits WHERE julianday(window_start)<julianday('now','-48 hours')").run();await collectAllSources(env)}catch(e){console.error(e)}}
    else if(event.cron==="0 23 * * SUN"){try{await enqueueWeekly(env,"weekly-"+new Date().toISOString().slice(0,10))}catch(e){console.error(e)}}
    else if(event.cron==="*/10 * * * *"){try{await continueEnqueues(env);await drainQueue(env,20)}catch(e){console.error(e)}}
   })());
