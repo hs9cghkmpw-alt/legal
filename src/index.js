@@ -94,8 +94,8 @@ async function collectAllSources(env){
  return results;
 }
 async function resumeEgovScanIfNeeded(env){
- const source=await env.DB.prepare("SELECT scan_offset,terms_checked FROM sources WHERE id='egov_law_api' AND enabled=1").first();
- if(!source||!source.terms_checked||!Number(source.scan_offset||0))return {skipped:true};
+ const source=await env.DB.prepare("SELECT scan_offset,scan_page_payload,terms_checked FROM sources WHERE id='egov_law_api' AND enabled=1").first();
+ if(!source||!source.terms_checked||(!Number(source.scan_offset||0)&&!source.scan_page_payload))return {skipped:true};
  try{return await collectEgovLawUpdates(env)}
  catch(e){
   const message=String(e.message||e).slice(0,500);
