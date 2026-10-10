@@ -110,7 +110,7 @@ async function approve(req,env){
  return result.meta.changes?json({ok:true,article_id:id,status:"approved"}):json({error:"承認待ち記事が見つかりません"},404);
 }
 
-async function enqueueWeekly(env,runId=newToken(),limit=50){
+export async function enqueueWeekly(env,runId=newToken(),limit=50){
  let run=await env.DB.prepare("SELECT run_id,enqueue_complete,last_subscriber_id FROM delivery_runs WHERE run_id=?").bind(runId).first();
  if(!run){
   await env.DB.prepare("INSERT INTO delivery_runs(run_id,status,queued_count,skipped_count,enqueue_complete,last_subscriber_id) VALUES(?,'queued',0,0,0,0)").bind(runId).run();
