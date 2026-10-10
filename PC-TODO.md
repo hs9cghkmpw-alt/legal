@@ -2,7 +2,7 @@
 
 ## 前提
 - リポジトリ: https://github.com/hs9cghkmpw-alt/legal
-- 作業ブランチ: main
+- PR #15 の確認・検証ブランチ: `feat/brand-and-landing-redesign`（マージ前に `main` へ切り替えない）
 - **本番デプロイ・実メール送信はまだ行わない。** 情報源の利用条件とプライバシー方針が未確認です。
 - HOJO-LETTERの秘密情報をコピーしない。
 
