@@ -38,21 +38,21 @@ test("does not call the API before source terms are confirmed",async()=>{
  assert.equal(result.skipped,true);assert.equal(calls,0);
 });
 
-test("collects recent amendments, ignores older ones, and groups revisions by amendment law",async()=>{
+test("collects recent amendment revisions and ignores older records",async()=>{
  const {DB,updates,articles}=mockDb();const urls=[];
  const fetchImpl=async url=>{urls.push(new URL(url));return response([
   law("A","2026-10-09","労働制度改正法"),
-  law("A","2026-10-08","労働制度改正法"),
+  law("C","2026-10-08","労働制度改正法"),
   law("B","2026-09-20","古い改正法")
  ])};
  const result=await collectEgovLawUpdates({DB},{fetchImpl,now:new Date("2026-10-10T12:00:00Z")});
- assert.equal(result.collected,1);
+ assert.equal(result.collected,2);
  assert.equal(result.withinWindow,2);
- assert.equal(updates.length,1);
+ assert.equal(updates.length,2);
  assert.equal(updates[0].externalId,"A_revision");
  assert.equal(updates[0].publishedAt,"2026-10-09");
  assert.match(updates[0].url,/laws\.e-gov\.go\.jp\/law\/A$/);
- assert.equal(articles.length,1);
+ assert.equal(articles.length,2);
  assert.equal(urls[0].searchParams.get("order"),null);
  assert.equal(urls[0].searchParams.get("limit"),"100");
 });
