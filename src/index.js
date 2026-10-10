@@ -24,9 +24,13 @@ const isAdmin=(req,env)=>Boolean(env.ADMIN_TOKEN&&env.ADMIN_TOKEN.length>=32&&re
 const denied=()=>json({error:"管理者認証が必要です。ADMIN_TOKEN（32文字以上）を設定してください。"},401);
 const base=env=>{
  const value=String(env.BASE_URL||"").replace(/\/$/,"");
- if(/^https:\/\/[^/]+(?:\/.*)?$/i.test(value))return value;
- if(/^http:\/\/localhost(?::\d+)?$/i.test(value))return value;
- throw new Error("BASE_URL must be an HTTPS production URL or localhost for local development");
+ try{
+  const u=new URL(value);
+  const originOnly=u.pathname==="/"&&!u.search&&!u.hash&&!u.username&&!u.password;
+  if(originOnly&&u.protocol==="https:")return u.origin;
+  if(originOnly&&u.protocol==="http:"&&u.hostname==="localhost")return u.origin;
+ }catch{}
+ throw new Error("BASE_URL must be an HTTPS origin or localhost origin for local development");
 };
 
 async function subscribe(req,env){
