@@ -22,4 +22,4 @@ CREATE INDEX IF NOT EXISTS idx_subscribers_delivery ON subscribers(confirmed,uns
 CREATE INDEX IF NOT EXISTS idx_delivery_queue_pending ON delivery_queue(status,next_attempt_at,id);
 INSERT OR IGNORE INTO roles(id,label) VALUES('individual','個人・生活者'),('employee','会社員・従業員'),('sole_proprietor','個人事業主・フリーランス'),('corporate_leader','法人経営者・役員'),('hr_labor','人事・労務担当者'),('general_legal','総務・法務担当者'),('other','その他');
 INSERT OR IGNORE INTO categories(id,label,description) VALUES('labor','労働・雇用','労働条件、雇用、職場の安全'),('tax','税金・会計','税制、申告、会計上の変更'),('social_insurance','社会保険・年金','年金、健康保険、給付制度'),('business','事業・取引','許認可、取引、事業者の義務'),('consumer','消費者・契約','契約、表示、消費者保護'),('digital_privacy','デジタル・個人情報','個人情報、情報セキュリティ、電子手続き'),('daily_life','交通・生活','交通、防災、日常生活のルール'),('other','その他の重要制度','ほかのカテゴリに収まらない重要な変更');
-INSERT OR IGNORE INTO sources(id,label,url,source_type,enabled,terms_checked) VALUES('digital_rss','デジタル庁 RSS','https://www.digital.go.jp/rss','rss',1,0);
+INSERT OR IGNORE INTO sources(id,label,url,source_type,enabled,terms_checked) VALUES('digital_rss','デジタル庁 RSS','https://www.digital.go.jp/rss/news.xml','rss',1,0);
