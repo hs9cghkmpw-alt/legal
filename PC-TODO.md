@@ -7,10 +7,11 @@
 - HOJO-LETTERの秘密情報をコピーしない。
 
 ## ブランチ・テスト
+PR #15 の作業内容を確認する場合は、mainではなく作業ブランチを使います。PRがマージされるまでは main に切り替えないでください。
 ```powershell
 Set-Location $HOME\Documents\rule-change-letter
 git fetch origin
-git switch main
+git switch feat/brand-and-landing-redesign
 git pull
 npm install
 npm test
@@ -51,9 +52,11 @@ npx wrangler d1 execute rule-change-letter --local --file=./schema.sql
 Copy-Item .dev.vars.example .dev.vars
 npx wrangler dev
 ```
-登録APIは有効なHTTPSの `PRIVACY_URL` が設定されるまで登録を拒否します。公開用方針を完成・公開してから設定してください。
+登録APIは有効なHTTPSの PRIVACY_URL と SIGNUP_ENABLED=true の両方がそろうまで登録を拒否します。SIGNUP_ENABLED は公開前チェック完了まで false のままにしてください。ローカル検証でも安易に有効化せず、実メール送信・外部公開は行わないでください。
 
 ## 人が確認すべき項目
+- docs/SOURCE_REUSE_REVIEW.md を読み、情報源ごとの利用条件の未解決点を確認。最終判断が済むまで terms_checked=0 を維持
+- docs/EDITORIAL_QA.md のチェックリストを使い、実データ候補5件を公式原文と照合。記録が揃うまでサンプルを公開せず、配信しない
 - 公開環境の `BASE_URL` を実際のWorker URL（HTTPS）に設定し、localhostがメール本文に入らないことを確認
 - プライバシー方針の草案を完成させ、運営者情報・問い合わせ先・保存期間・Cloudflare/Brevoの処理内容・ログ/バックアップ保持を記載
 - デジタル庁RSSとe-Gov法令API Version 2の利用条件・例外・出典表記を確認し、未確認なら `terms_checked=0`
