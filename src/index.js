@@ -74,12 +74,21 @@ async function confirm(req,url,env){
  return r.meta.changes?page("登録完了","<h1>登録が完了しました</h1>"):page("確認できません","<h1>リンクが無効です</h1>",400);
 }
 async function unsubscribe(req,url,env){
- let t=url.searchParams.get("token")||"";
- if(req.method==="POST"){try{t=String((await req.formData()).get("token")||"")}catch{}}
+ let t=url.searchParams.get("token")||"",action="unsubscribe";
+ if(req.method==="POST"){
+  try{const form=await req.formData();t=String(form.get("token")||"");action=String(form.get("action")||"unsubscribe")}catch{}
+ }
  if(!t||t.length>100)return page("配信停止","<h1>リンクが無効です</h1>",400);
- if(req.method==="GET")return page("配信停止",'<h1>配信停止の確認</h1><form method="post" action="/unsubscribe"><input type="hidden" name="token" value="'+escapeHtml(t)+'"><button>配信を停止する</button></form>');
- const subscriber=await env.DB.prepare("SELECT id FROM subscribers WHERE unsubscribe_token=?").bind(t).first();
+ if(!["unsubscribe","delete"].includes(action))return page("配信停止","<h1>操作が無効です</h1>",400);
+ if(req.method==="GET")return page("配信停止",'<h1>配信停止・登録情報削除</h1><p>配信を停止するか、登録情報を削除できます。</p><form method="post" action="/unsubscribe"><input type="hidden" name="token" value="'+escapeHtml(t)+'"><p><button name="action" value="unsubscribe">配信を停止する</button></p><p><button name="action" value="delete">配信を停止し、登録情報を削除する</button></p></form>');
+ const subscriber=await env.DB.prepare("SELECT id,email FROM subscribers WHERE unsubscribe_token=?").bind(t).first();
  if(!subscriber)return page("配信停止","<h1>リンクが無効です</h1>",404);
+ if(action==="delete"){
+  // Explicit POST action removes the subscriber and all related rows protected by FK cascades.
+  await env.DB.prepare("DELETE FROM rate_limits WHERE rate_key=?").bind("email:"+subscriber.email).run();
+  await env.DB.prepare("DELETE FROM subscribers WHERE id=?").bind(subscriber.id).run();
+  return page("登録情報削除","<h1>登録情報を削除しました</h1><p>配信は停止されました。処理中のメール送信は停止要求と競合する場合があります。</p>");
+ }
  await env.DB.prepare("UPDATE subscribers SET unsubscribed=1,confirmed=0 WHERE id=?").bind(subscriber.id).run();
  await env.DB.prepare("DELETE FROM delivery_queue WHERE subscriber_id=? AND status='pending'").bind(subscriber.id).run();
  return page("配信停止","<h1>配信を停止しました</h1>");

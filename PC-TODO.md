@@ -2,7 +2,7 @@
 
 ## 前提
 - リポジトリ: https://github.com/hs9cghkmpw-alt/legal
-- 作業ブランチ: fix/security-queue-2026-10
+- 作業ブランチ: main
 - **本番デプロイ・実メール送信はまだ行わない。** 情報源の利用条件とプライバシー方針が未確認です。
 - HOJO-LETTERの秘密情報をコピーしない。
 
@@ -10,7 +10,7 @@
 ```powershell
 Set-Location $HOME\Documents\rule-change-letter
 git fetch origin
-git switch fix/security-queue-2026-10
+git switch main
 git pull
 npm install
 npm test
@@ -34,10 +34,10 @@ npx wrangler dev
 
 ## 人が確認すべき項目
 - 公開環境の `BASE_URL` を実際のWorker URL（HTTPS）に設定し、localhostがメール本文に入らないことを確認
-- プライバシー方針の草案を完成させ、運営者情報・問い合わせ先・保存期間を記載
-- デジタル庁RSSの形式と利用・加工・再配信条件を確認し、未確認なら `terms_checked=0`
-- e-Gov法令APIと省庁情報源を追加設計
+- プライバシー方針の草案を完成させ、運営者情報・問い合わせ先・保存期間・Cloudflare/Brevoの処理内容・ログ/バックアップ保持を記載
+- デジタル庁RSSとe-Gov法令API Version 2の利用条件・例外・出典表記を確認し、未確認なら `terms_checked=0`
+- e-Gov法令APIの実データ応答・改正候補・施行日を原文と照合。テスト成功だけでは実データ取得を確認したことにならない
 - ローカルテスト、D1移行テスト、実際のメール到達性テスト
 - Cloudflare/Brevoの無料枠・レート・規約を確認
 - 本番の `BASE_URL`、`PRIVACY_URL`、送信元ドメインを設定
-- 未承認記事が送られないこと、配信停止、失敗再試行、登録者50人超のキュー作成と配信20人超のバッチをテスト
+- 未承認記事が送られないこと、配信停止、登録情報削除、失敗再試行、登録者50人超のキュー作成と配信20人超のバッチをテスト
