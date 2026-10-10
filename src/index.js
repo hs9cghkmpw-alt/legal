@@ -22,7 +22,12 @@ async function rateLimit(env,key,limit=5){
 const newToken=()=>crypto.randomUUID()+crypto.randomUUID().replace(/-/g,"");
 const isAdmin=(req,env)=>Boolean(env.ADMIN_TOKEN&&env.ADMIN_TOKEN.length>=32&&req.headers.get("authorization")==="Bearer "+env.ADMIN_TOKEN);
 const denied=()=>json({error:"管理者認証が必要です。ADMIN_TOKEN（32文字以上）を設定してください。"},401);
-const base=env=>(env.BASE_URL||"http://localhost:8787").replace(/\/$/,"");
+const base=env=>{
+ const value=String(env.BASE_URL||"").replace(/\/$/,"");
+ if(/^https:\/\/[^/]+(?:\/.*)?$/i.test(value))return value;
+ if(/^http:\/\/localhost(?::\d+)?$/i.test(value))return value;
+ throw new Error("BASE_URL must be an HTTPS production URL or localhost for local development");
+};
 
 async function subscribe(req,env){
  let d;try{d=await req.json()}catch{return json({error:"JSON形式で送信してください"},400)}
@@ -33,6 +38,7 @@ async function subscribe(req,env){
  if(!cats.length)return json({error:"カテゴリを1つ以上選択してください"},400);
  if(d.consent!==true)return json({error:"配信への同意が必要です"},400);
  if(!env.PRIVACY_URL||!env.PRIVACY_URL.startsWith("https://"))return json({error:"プライバシー方針の公開URLが未設定のため登録を停止しています"},503);
+ try{base(env)}catch{return json({error:"BASE_URL が未設定または不正です。公開環境ではHTTPSのWorker URLを設定してください"},503)}
  const ip=req.headers.get("CF-Connecting-IP")||"unknown";
  if(!(await rateLimit(env,"ip:"+ip,10))||!(await rateLimit(env,"email:"+email,3)))return json({error:"操作回数が上限に達しました。時間をおいて再度お試しください"},429);
  const old=await env.DB.prepare("SELECT id,confirmed,unsubscribed FROM subscribers WHERE email=?").bind(email).first();
