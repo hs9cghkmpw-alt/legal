@@ -30,7 +30,7 @@ test("a configured HTTPS privacy policy enables signup controls and links to the
     PRIVACY_URL: "https://example.test/privacy"
   });
   const html = await response.text();
-  assert.match(html, /href="https://example.test/privacy"/);
+  assert.ok(html.includes('href="https://example.test/privacy"'));
   assert.doesNotMatch(html, /登録は一時停止中です/);
   assert.match(html, /id="submit">確認メールを送る/);
   assert.match(html, /name="consent" required>/);
