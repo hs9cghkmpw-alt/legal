@@ -168,6 +168,8 @@ async function approve(req,env){
 }
 
 export async function enqueueWeekly(env,runId=newToken(),limit=50){
+ // Pause scheduled queue creation until the operator explicitly enables the service.
+ if(String(env.SIGNUP_ENABLED||"").toLowerCase()!=="true")return {skipped:true,reason:"service-not-ready"};
  let run=await env.DB.prepare("SELECT run_id,enqueue_complete,last_subscriber_id,article_snapshot FROM delivery_runs WHERE run_id=?").bind(runId).first();
  if(!run){
   const snapshot=await env.DB.prepare("SELECT id,category_ids FROM articles WHERE status='approved' ORDER BY id LIMIT 500").all();
@@ -214,6 +216,8 @@ async function continueEnqueues(env){
  return results;
 }
 async function drainQueue(env,limit=20){
+ // Defense in depth: queued messages must not be sent while readiness is disabled.
+ if(String(env.SIGNUP_ENABLED||"").toLowerCase()!=="true")return {skipped:true,sent:0,errors:0,reason:"service-not-ready"};
  const lease=newToken();
  const lock=await env.DB.prepare("UPDATE system_locks SET lock_token=?,lock_until=datetime('now','+8 minutes') WHERE lock_name='delivery' AND (lock_until IS NULL OR lock_until<CURRENT_TIMESTAMP)").bind(lease).run();
  if(!lock.meta.changes)return {busy:true,sent:0,errors:0};
