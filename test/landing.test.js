@@ -59,6 +59,14 @@ test("inline onboarding JavaScript is syntactically valid after server rendering
   assert.doesNotThrow(() => new Function(script));
 });
 
+test("confirmation page explains the final step and accidental-signup handling", async () => {
+  const response = await worker.fetch(new Request("https://example.test/confirm?token=test-token"), {});
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /ボタンを押すと登録が完了します/);
+  assert.match(html, /登録した覚えがない場合は、このページを閉じてください/);
+});
+
 test("an invalid or non-HTTPS privacy URL does not enable signup", async () => {
   for (const privacyUrl of ["http://example.test/privacy", "https://", "javascript:alert(1)"]) {
     const response = await worker.fetch(new Request("https://example.test/"), { PRIVACY_URL: privacyUrl });
