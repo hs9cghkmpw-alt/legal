@@ -149,7 +149,7 @@ async function enqueueWeekly(env,runId=newToken(),limit=50){
  return {runId,queuedSoFar:Number(count?.n||0),lastSubscriberId:lastId,enqueueComplete:false};
 }
 async function continueEnqueues(env){
- const runs=await env.DB.prepare("SELECT run_id FROM delivery_runs WHERE enqueue_complete=0 ORDER BY id LIMIT 5").all();
+ const runs=await env.DB.prepare("SELECT run_id FROM delivery_runs WHERE enqueue_complete=0 ORDER BY id LIMIT 1").all();
  const results=[];
  for(const run of runs.results||[])results.push(await enqueueWeekly(env,run.run_id,50));
  return results;
