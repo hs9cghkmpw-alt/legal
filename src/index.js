@@ -311,6 +311,8 @@ export default {
   if(req.method==="GET"&&u.pathname==="/api/admin/updates")return listUpdates(req,env);
   if(req.method==="POST"&&u.pathname==="/api/admin/approve")return approve(req,env);
   if(req.method==="POST"&&u.pathname==="/api/admin/send")return sendNow(req,env);
+  if(req.method==="GET"&&u.pathname==="/api/admin/delivery-issues")return listDeliveryIssues(req,env);
+  if(req.method==="POST"&&u.pathname==="/api/admin/reconcile-delivery")return reconcileDelivery(req,env);
   return page("Not Found","<h1>404</h1><p>ページが見つかりません。</p>",404);
  },
  async scheduled(event,env,ctx){
