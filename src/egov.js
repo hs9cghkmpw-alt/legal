@@ -2,9 +2,10 @@ import {classifyText} from "./categories.js";
 
 const API_URL="https://laws.e-gov.go.jp/api/2/laws";
 const DAY_MS=24*60*60*1000;
+const MAX_PAGES_PER_RUN=10;
 
 function validDate(value){
- if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+ if(typeof value!=="string"||!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return false;
  const date=new Date(value+"T00:00:00Z");
  return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
 }
@@ -26,15 +27,17 @@ function normalizeLaw(law){
 }
 
 export async function collectEgovLawUpdates(env,{fetchImpl=fetch,now=new Date()}={}){
- const source=await env.DB.prepare("SELECT id,url,terms_checked FROM sources WHERE id=? AND enabled=1").bind("egov_law_api").first();
+ const source=await env.DB.prepare("SELECT id,url,terms_checked,scan_offset,scan_cutoff FROM sources WHERE id=? AND enabled=1").bind("egov_law_api").first();
  if(!source)return {collected:0,skipped:true,reason:"source-disabled-or-missing"};
  if(!source.terms_checked)return {collected:0,skipped:true,reason:"source-terms-not-confirmed"};
 
- const cutoff=new Date(now.getTime()-7*DAY_MS).toISOString().slice(0,10);
+ const savedOffset=Number(source.scan_offset||0);
+ const resume=validDate(source.scan_cutoff)&&Number.isSafeInteger(savedOffset)&&savedOffset>0;
+ const cutoff=resume?source.scan_cutoff:new Date(now.getTime()-7*DAY_MS).toISOString().slice(0,10);
  const endpoint=source.url||API_URL;
  const grouped=new Map();
- let offset=0,pages=0,scanned=0,done=false;
- while(pages<10&&!done){
+ let offset=resume?savedOffset:0,pages=0,scanned=0,done=false,nextOffset=offset;
+ while(pages<MAX_PAGES_PER_RUN&&!done){
   const url=new URL(endpoint);
   url.searchParams.set("limit","100");
   url.searchParams.set("offset",String(offset));
@@ -49,15 +52,17 @@ export async function collectEgovLawUpdates(env,{fetchImpl=fetch,now=new Date()}
    const item=normalizeLaw(law);
    if(!item)continue;
    if(item.date<cutoff){done=true;continue}
-   // Avoid treating the base law itself as a new change when API metadata does not identify an amendment.
    if(!item.revision.amendment_law_id&&item.type!=="1")continue;
    const prior=grouped.get(item.id);
    if(!prior||item.date>prior.date)grouped.set(item.id,item);
   }
   const next=payload.next_offset;
-  if(done||next===null||next===undefined||payload.laws.length===0)done=true;
-  else offset=Number(next);
-  if(!Number.isSafeInteger(offset)||offset<0)throw new Error("e-Gov法令APIのページ位置が不正です");
+  if(done||next===null||next===undefined||payload.laws.length===0){done=true;nextOffset=0}
+  else{
+   nextOffset=Number(next);
+   if(!Number.isSafeInteger(nextOffset)||nextOffset<=offset)throw new Error("e-Gov法令APIのページ位置が不正です");
+   offset=nextOffset;
+  }
  }
  let count=0;
  for(const item of grouped.values()){
@@ -69,8 +74,8 @@ export async function collectEgovLawUpdates(env,{fetchImpl=fetch,now=new Date()}
    "公布日: "+item.date,
    "改正区分: "+(item.mission||item.type||"不明"),
    "法令履歴ID: "+item.revisionId
-  ].join("\n");
-  const contentHash=await hash([item.id,item.title,item.date,item.revisionId].join("\n"));
+  ].join("\\n");
+  const contentHash=await hash([item.id,item.title,item.date,item.revisionId].join("\\n"));
   const inserted=await env.DB.prepare("INSERT OR IGNORE INTO updates(source_id,external_id,title,url,published_at,description,content_hash) VALUES(?,?,?,?,?,?,?)")
    .bind(source.id,item.id,item.title,lawUrl,item.date,description,contentHash).run();
   const categories=classifyText(item.title+" "+item.lawTitle+" "+description);
@@ -78,6 +83,12 @@ export async function collectEgovLawUpdates(env,{fetchImpl=fetch,now=new Date()}
    .bind("e-Gov法令APIで検出した改正候補です。配信前に改正法令と施行日を原文確認してください。","改正情報の候補を検出しました。改正内容・適用範囲は原文確認が必要です。","関連法令の対象者を原文で確認してください。","改正法令本文・附則・施行期日・経過措置を確認してください。",JSON.stringify(categories),source.id,item.id).run();
   if(inserted.meta?.changes)count++;
  }
- await env.DB.prepare("UPDATE sources SET last_checked_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(source.id).run();
- return {collected:count,scanned,pages,withinWindow:grouped.size,cutoff,hasMore:!done};
+ // Persist the next offset only after this batch's candidates are written. If the Worker
+ // stops early, the same page is retried and INSERT OR IGNORE keeps it idempotent.
+ if(done){
+  await env.DB.prepare("UPDATE sources SET scan_offset=0,scan_cutoff=NULL,last_checked_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(source.id).run();
+ }else{
+  await env.DB.prepare("UPDATE sources SET scan_offset=?,scan_cutoff=?,last_checked_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(nextOffset,cutoff,source.id).run();
+ }
+ return {collected:count,scanned,pages,withinWindow:grouped.size,cutoff,hasMore:!done,nextOffset:done?null:nextOffset};
 }
