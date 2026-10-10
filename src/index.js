@@ -175,14 +175,15 @@ async function drainQueue(env,limit=20){
     await env.DB.prepare("UPDATE delivery_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(p.id).run();sent++;
    }catch(e){errors++;await env.DB.prepare("UPDATE delivery_queue SET status=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,next_attempt_at=datetime('now','+' || MIN(60,5*attempts) || ' minutes'),last_error=? WHERE id=?").bind(String(e.message||e).slice(0,500),p.id).run();}
   }
-  await env.DB.prepare("UPDATE delivery_runs SET status=CASE WHEN EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status IN ('pending','sending')) THEN 'queued' WHEN EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status='failed') THEN 'partial_failure' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status='queued'").run();
+  await env.DB.prepare("UPDATE delivery_runs SET status=CASE WHEN enqueue_complete=0 OR EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status IN ('pending','sending')) THEN 'queued' WHEN EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status='failed') THEN 'partial_failure' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE status='queued'").run();
   return {sent,errors,processed:rows.results?.length||0};
  }finally{await env.DB.prepare("UPDATE system_locks SET lock_token=NULL,lock_until=NULL WHERE lock_name='delivery' AND lock_token=?").bind(lease).run()}
 }
 async function sendNow(req,env){
  if(!isAdmin(req,env))return denied();
+ const incomplete=await env.DB.prepare("SELECT run_id FROM delivery_runs WHERE enqueue_complete=0 ORDER BY id LIMIT 1").first();
  const pending=await env.DB.prepare("SELECT id FROM delivery_queue WHERE status IN ('pending','sending') LIMIT 1").first();
- const run=pending?{alreadyQueued:true,note:"既存キューを処理します"}:await enqueueWeekly(env);
+ const run=incomplete?await enqueueWeekly(env,incomplete.run_id,50):pending?{alreadyQueued:true,note:"既存キューを処理します"}:await enqueueWeekly(env);
  const drain=await drainQueue(env,20);
  return json({run,drain});
 }
@@ -206,7 +207,7 @@ export default {
   ctx.waitUntil((async()=>{
    if(event.cron==="0 22 * * *"){try{await collectDigitalRss(env)}catch(e){await env.DB.prepare("UPDATE sources SET last_error=? WHERE id='digital_rss'").bind(String(e.message||e).slice(0,500)).run();console.error(e)}}
    else if(event.cron==="0 23 * * SUN"){try{await enqueueWeekly(env,"weekly-"+new Date().toISOString().slice(0,10))}catch(e){console.error(e)}}
-   else if(event.cron==="*/10 * * * *"){try{await drainQueue(env,20)}catch(e){console.error(e)}}
+   else if(event.cron==="*/10 * * * *"){try{await continueEnqueues(env);await drainQueue(env,20)}catch(e){console.error(e)}}
   })());
  }
 };
