@@ -13,6 +13,11 @@
 - プライバシー方針URLに加えて `SIGNUP_ENABLED=true` が設定されない限り、画面と登録APIの両方で受付を停止する。フラグは利用条件・プライバシー・配信運用の確認が完了するまで有効化しない。
 - 改善理由と未解決リスクは `docs/ONBOARDING_REVIEW.md` に記録。
 
+## 編集品質・情報源確認
+- `docs/SOURCE_REUSE_REVIEW.md`：e-Gov APIとデジタル庁RSSの再利用条件に関する暫定確認。最終判断は未完了で、`terms_checked=0` を維持。
+- `docs/EDITORIAL_QA.md`：原文照合・承認・訂正の基準。
+- `docs/SAMPLE_ARTICLE_DRAFT.md`：国土交通省の実際の発表を根拠にした内部候補。未承認であり、公開サンプル・配信に使用しない。
+
 ## 現状・制限
 - 未デプロイ。実データ、実メール、無料枠、セキュリティの検証は未実施。
 - 情報源候補はデジタル庁RSSと e-Gov法令API Version 2。両方とも利用条件確認前は `terms_checked=0` のまま収集停止。
