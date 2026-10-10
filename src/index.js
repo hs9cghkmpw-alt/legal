@@ -282,6 +282,8 @@ async function reconcileDelivery(req,env){
   if(Number(marked.meta?.changes)!==1)return json({error:"配信キューの状態が変わったため照合を中止しました。最新状態を再確認してください"},409);
   try{
    for(const articleId of ids)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(q.subscriber_id,articleId).run();
+   const finalized=await env.DB.prepare("UPDATE delivery_queue SET last_error=NULL WHERE id=? AND status='sent' AND last_error='manually-confirmed-provider-accepted'").bind(id).run();
+   if(Number(finalized.meta?.changes)!==1)return json({error:"配信履歴は保存しましたが、照合状態の確定を確認できませんでした。管理者がキューと配信履歴を確認してください。",queue_id:id,recovery:"manual-database-inspection-required"},500);
   }catch(e){
    console.error("manual-reconciliation-sent-record-write-failed", {queueId:id, error:String(e)});
    try{
