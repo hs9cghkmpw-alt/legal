@@ -25,6 +25,10 @@ test("drainQueue skips provider send when subscriber unsubscribes after queue cl
   const DB = {
     prepare(sql) {
       return {
+        async run() {
+          calls.push({ sql, args: [], op: "run" });
+          return { meta: { changes: 1 } };
+        },
         bind(...args) {
           return {
             async first() {
