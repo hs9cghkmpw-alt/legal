@@ -22,7 +22,16 @@ async function rateLimit(env,key,limit=5){
 const newToken=()=>crypto.randomUUID()+crypto.randomUUID().replace(/-/g,"");
 const isAdmin=(req,env)=>Boolean(env.ADMIN_TOKEN&&env.ADMIN_TOKEN.length>=32&&req.headers.get("authorization")==="Bearer "+env.ADMIN_TOKEN);
 const denied=()=>json({error:"管理者認証が必要です。ADMIN_TOKEN（32文字以上）を設定してください。"},401);
-const base=env=>(env.BASE_URL||"http://localhost:8787").replace(/\/$/,"");
+const base=env=>{
+ const value=String(env.BASE_URL||"").replace(/\/$/,"");
+ try{
+  const u=new URL(value);
+  const originOnly=u.pathname==="/"&&!u.search&&!u.hash&&!u.username&&!u.password;
+  if(originOnly&&u.protocol==="https:")return u.origin;
+  if(originOnly&&u.protocol==="http:"&&u.hostname==="localhost")return u.origin;
+ }catch{}
+ throw new Error("BASE_URL must be an HTTPS origin or localhost origin for local development");
+};
 
 async function subscribe(req,env){
  let d;try{d=await req.json()}catch{return json({error:"JSON形式で送信してください"},400)}
@@ -33,12 +42,17 @@ async function subscribe(req,env){
  if(!cats.length)return json({error:"カテゴリを1つ以上選択してください"},400);
  if(d.consent!==true)return json({error:"配信への同意が必要です"},400);
  if(!env.PRIVACY_URL||!env.PRIVACY_URL.startsWith("https://"))return json({error:"プライバシー方針の公開URLが未設定のため登録を停止しています"},503);
+ try{base(env)}catch{return json({error:"BASE_URL が未設定または不正です。公開環境ではHTTPSのWorker URLを設定してください"},503)}
  const ip=req.headers.get("CF-Connecting-IP")||"unknown";
  if(!(await rateLimit(env,"ip:"+ip,10))||!(await rateLimit(env,"email:"+email,3)))return json({error:"操作回数が上限に達しました。時間をおいて再度お試しください"},429);
  const old=await env.DB.prepare("SELECT id,confirmed,unsubscribed FROM subscribers WHERE email=?").bind(email).first();
  if(old?.confirmed&&!old.unsubscribed)return json({message:"このメールアドレスは登録済みです"},200);
  const ct=newToken(),ut=newToken();let id;
- if(old){await env.DB.prepare("UPDATE subscribers SET confirmation_token=?,unsubscribe_token=?,confirmed=0,unsubscribed=0,confirmed_at=NULL,consent_at=CURRENT_TIMESTAMP,consent_version=? WHERE id=?").bind(ct,ut,env.PRIVACY_VERSION||"draft-1",old.id).run();id=old.id}
+ if(old){
+  // A new subscription must not inherit stale, unsent articles from a previous subscription.
+  await env.DB.prepare("DELETE FROM delivery_queue WHERE subscriber_id=? AND status!='sent'").bind(old.id).run();
+  await env.DB.prepare("UPDATE subscribers SET confirmation_token=?,unsubscribe_token=?,confirmed=0,unsubscribed=0,confirmed_at=NULL,consent_at=CURRENT_TIMESTAMP,consent_version=? WHERE id=?").bind(ct,ut,env.PRIVACY_VERSION||"draft-1",old.id).run();id=old.id
+ }
  else{const r=await env.DB.prepare("INSERT INTO subscribers(email,confirmation_token,unsubscribe_token,consent_at,consent_version) VALUES(?,?,?,?,?)").bind(email,ct,ut,new Date().toISOString(),env.PRIVACY_VERSION||"draft-1").run();id=r.meta.last_row_id}
  await env.DB.prepare("DELETE FROM subscriber_roles WHERE subscriber_id=?").bind(id).run();
  await env.DB.prepare("DELETE FROM subscriber_categories WHERE subscriber_id=?").bind(id).run();
