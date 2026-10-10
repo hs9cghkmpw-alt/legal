@@ -2,7 +2,7 @@ import {classifyText} from "./categories.js";
 
 const API_URL="https://laws.e-gov.go.jp/api/2/laws";
 const DAY_MS=24*60*60*1000;
-const MAX_CANDIDATES_PER_RUN=15;
+const MAX_CANDIDATES_PER_RUN=10;
 
 function validDate(value){
  if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
