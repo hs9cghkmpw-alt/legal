@@ -272,6 +272,8 @@ async function reconcileDelivery(req,env){
  const q=await env.DB.prepare("SELECT id,run_id,subscriber_id,article_ids,status,sending_started_at FROM delivery_queue WHERE id=?").bind(id).first();
  if(!q)return json({error:"配信キューが見つかりません"},404);
  if(!["sending","failed"].includes(q.status))return json({error:"この状態のキューは照合対象ではありません"},409);
+ const activeLock=await env.DB.prepare("SELECT lock_token,lock_until FROM system_locks WHERE lock_name='delivery'").first();
+ if(activeLock?.lock_token&&activeLock.lock_until&&activeLock.lock_until>=new Date().toISOString().replace("T"," ").slice(0,19))return json({error:"配信Workerが稼働中の可能性があるため、ロック解除後に再試行してください"},409);
  if(action==="mark_sent"){
   if(d.provider_confirmed_accepted!==true)return json({error:"事業者ログで受理を確認した場合のみ provider_confirmed_accepted=true を指定してください"},400);
   let ids;try{ids=JSON.parse(q.article_ids)}catch{return json({error:"article_ids が壊れているため手動確認が必要です"},409)}
