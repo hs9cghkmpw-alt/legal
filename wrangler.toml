@@ -1,19 +1,17 @@
 name = "rule-change-letter"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
-
-# npx wrangler d1 create rule-change-letter の database_id を設定
 [[d1_databases]]
 binding = "DB"
 database_name = "rule-change-letter"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
-
 [triggers]
-# UTC 22:00 = JST 07:00 / 日曜UTC23:00 = 月曜JST08:00
-crons = ["0 22 * * *", "0 23 * * SUN"]
-
+# UTC: collect 07:00 JST daily; enqueue Monday 08:00 JST; drain 20 recipients every 10 minutes.
+crons = ["0 22 * * *", "0 23 * * SUN", "*/10 * * * *"]
 [vars]
 SERVICE_NAME = "ルール変更レター"
 BASE_URL = "http://localhost:8787"
 SENDER_NAME = "ルール変更レター"
 SENDER_EMAIL = "replace-with-verified-sender@example.com"
+PRIVACY_URL = ""
+PRIVACY_VERSION = "draft-1"
