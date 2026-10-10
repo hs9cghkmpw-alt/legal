@@ -260,8 +260,8 @@ export async function drainQueue(env,limit=20){
 }
 async function listDeliveryIssues(req,env){
  if(!isAdmin(req,env))return denied();
- const rows=await env.DB.prepare("SELECT q.id,q.run_id,q.subscriber_id,s.email,q.article_ids,q.status,q.attempts,q.sending_started_at,q.created_at,q.last_error FROM delivery_queue q JOIN subscribers s ON s.id=q.subscriber_id WHERE q.status IN ('sending','failed') ORDER BY CASE q.status WHEN 'sending' THEN 0 ELSE 1 END,q.id LIMIT 100").all();
- return json({items:rows.results||[],policy:{staleSendingAfterMinutes:20,actionsRequireProviderLog:true}});
+ const rows=await env.DB.prepare("SELECT q.id,q.run_id,q.subscriber_id,s.email,q.article_ids,q.status,q.attempts,q.sending_started_at,q.created_at,q.last_error FROM delivery_queue q JOIN subscribers s ON s.id=q.subscriber_id WHERE q.status IN ('sending','failed') OR (q.status='sent' AND q.last_error='manually-confirmed-provider-accepted') ORDER BY CASE q.status WHEN 'sending' THEN 0 WHEN 'failed' THEN 1 ELSE 2 END,q.id LIMIT 100").all();
+ return json({items:rows.results||[],policy:{staleSendingAfterMinutes:20,actionsRequireProviderLog:true,manualSentRecordWriteAnomaly:"sent with last_error=manually-confirmed-provider-accepted requires manual inspection; do not reconcile or retry automatically"}});
 }
 async function reconcileDelivery(req,env){
  if(!isAdmin(req,env))return denied();
@@ -283,8 +283,17 @@ async function reconcileDelivery(req,env){
   try{
    for(const articleId of ids)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(q.subscriber_id,articleId).run();
   }catch(e){
-   await env.DB.prepare("UPDATE delivery_queue SET status='failed',sending_started_at=NULL,last_error='manual-reconciliation-sent-record-write-failed' WHERE id=? AND status='sent' AND last_error='manually-confirmed-provider-accepted'").bind(id).run();
-   throw e;
+   console.error("manual-reconciliation-sent-record-write-failed", {queueId:id, error:String(e)});
+   try{
+    const reverted=await env.DB.prepare("UPDATE delivery_queue SET status='failed',sending_started_at=NULL,last_error='manual-reconciliation-sent-record-write-failed' WHERE id=? AND status='sent' AND last_error='manually-confirmed-provider-accepted'").bind(id).run();
+    if(Number(reverted.meta?.changes)===1){
+     return json({error:"配信済み履歴の保存に失敗しました。キューは failed に戻しました。事業者ログと配信履歴を確認し、解消するまで自動再試行しないでください。",queue_id:id,recovery:"queue-reverted-to-failed"},500);
+    }
+    console.error("manual-reconciliation-queue-revert-not-applied", {queueId:id, changes:reverted.meta?.changes});
+   }catch(revertError){
+    console.error("manual-reconciliation-queue-revert-failed", {queueId:id, error:String(revertError)});
+   }
+   return json({error:"配信済み履歴の保存に失敗し、キュー状態の復旧も確認できませんでした。自動再試行せず、delivery_queue と sent を管理者が手動確認してください。",queue_id:id,recovery:"manual-database-inspection-required"},500);
   }
  }else{
   if(d.provider_confirmed_not_accepted!==true)return json({error:"事業者ログで未受理を確認した場合のみ provider_confirmed_not_accepted=true を指定してください"},400);
