@@ -7,7 +7,7 @@ function fakeDb(total){
  const people=Array.from({length:total},(_,i)=>({id:i+1,confirmed:1,unsubscribed:0}));
  return {
   run,
-  prepare(sql){return {bind(...args){return {
+  prepare(sql){return {all:async()=>({results:[]}),bind(...args){return {
    first:async()=>{
     if(sql.startsWith("SELECT run_id,enqueue_complete,last_subscriber_id,article_snapshot"))return run.run_id?{...run}:null;
     if(sql.startsWith("SELECT id FROM subscribers WHERE id>?"))return people.find(p=>p.id>args[0])||null;
