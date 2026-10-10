@@ -263,6 +263,32 @@ async function listDeliveryIssues(req,env){
  const rows=await env.DB.prepare("SELECT q.id,q.run_id,q.subscriber_id,s.email,q.article_ids,q.status,q.attempts,q.sending_started_at,q.created_at,q.last_error FROM delivery_queue q JOIN subscribers s ON s.id=q.subscriber_id WHERE q.status IN ('sending','failed') ORDER BY CASE q.status WHEN 'sending' THEN 0 ELSE 1 END,q.id LIMIT 100").all();
  return json({items:rows.results||[],policy:{staleSendingAfterMinutes:20,actionsRequireProviderLog:true}});
 }
+async function reconcileDelivery(req,env){
+ if(!isAdmin(req,env))return denied();
+ let d;try{d=await req.json()}catch{return json({error:"JSON形式で送信してください"},400)}
+ const id=Number(d.queue_id),action=String(d.action||"");
+ if(!Number.isSafeInteger(id)||id<1)return json({error:"queue_id が不正です"},400);
+ if(!["mark_sent","retry_confirmed_not_sent"].includes(action))return json({error:"action が不正です"},400);
+ const q=await env.DB.prepare("SELECT id,run_id,subscriber_id,article_ids,status,sending_started_at FROM delivery_queue WHERE id=?").bind(id).first();
+ if(!q)return json({error:"配信キューが見つかりません"},404);
+ if(!["sending","failed"].includes(q.status))return json({error:"この状態のキューは照合対象ではありません"},409);
+ if(action==="mark_sent"){
+  if(d.provider_confirmed_accepted!==true)return json({error:"事業者ログで受理を確認した場合のみ provider_confirmed_accepted=true を指定してください"},400);
+  let ids;try{ids=JSON.parse(q.article_ids)}catch{return json({error:"article_ids が壊れているため手動確認が必要です"},409)}
+  if(!Array.isArray(ids)||!ids.length||ids.some(x=>!Number.isSafeInteger(Number(x))||Number(x)<1))return json({error:"article_ids が不正です"},409);
+  for(const articleId of ids)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(q.subscriber_id,Number(articleId)).run();
+  await env.DB.prepare("UPDATE delivery_queue SET status='sent',sent_at=COALESCE(sent_at,CURRENT_TIMESTAMP),sending_started_at=NULL,last_error='manually-confirmed-provider-accepted' WHERE id=? AND status IN ('sending','failed')").bind(id).run();
+ }else{
+  if(d.provider_confirmed_not_accepted!==true)return json({error:"事業者ログで未受理を確認した場合のみ provider_confirmed_not_accepted=true を指定してください"},400);
+  if(q.status==="sending"){
+   const age=await env.DB.prepare("SELECT CASE WHEN sending_started_at IS NOT NULL AND datetime(sending_started_at)<=datetime('now','-20 minutes') THEN 1 ELSE 0 END AS old_enough FROM delivery_queue WHERE id=?").bind(id).first();
+   if(Number(age?.old_enough)!==1)return json({error:"sending は開始から20分以上経過した行だけ再試行できます。Workerの停止と事業者ログも確認してください"},409);
+  }
+  await env.DB.prepare("UPDATE delivery_queue SET status='pending',attempts=0,next_attempt_at=CURRENT_TIMESTAMP,sending_started_at=NULL,last_error='manual-retry-confirmed-not-sent' WHERE id=? AND status IN ('sending','failed')").bind(id).run();
+ }
+ await env.DB.prepare("UPDATE delivery_runs SET status=CASE WHEN enqueue_complete=0 OR EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status IN ('pending','sending')) THEN 'queued' WHEN EXISTS(SELECT 1 FROM delivery_queue q WHERE q.run_id=delivery_runs.run_id AND q.status='failed') THEN 'partial_failure' ELSE 'completed' END,updated_at=CURRENT_TIMESTAMP WHERE run_id=?").bind(q.run_id).run();
+ return json({ok:true,queue_id:id,action,status:action==="mark_sent"?"sent":"pending",note:"事業者側の配信ログを確認した記録を運用ログにも残してください。"});
+}
 async function sendNow(req,env){
  if(!isAdmin(req,env))return denied();
  const incomplete=await env.DB.prepare("SELECT run_id FROM delivery_runs WHERE enqueue_complete=0 ORDER BY id LIMIT 1").first();
