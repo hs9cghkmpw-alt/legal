@@ -258,6 +258,11 @@ export async function drainQueue(env,limit=20){
   return {sent,errors,processed:rows.results?.length||0};
  }finally{await env.DB.prepare("UPDATE system_locks SET lock_token=NULL,lock_until=NULL WHERE lock_name='delivery' AND lock_token=?").bind(lease).run()}
 }
+async function listDeliveryIssues(req,env){
+ if(!isAdmin(req,env))return denied();
+ const rows=await env.DB.prepare("SELECT q.id,q.run_id,q.subscriber_id,s.email,q.article_ids,q.status,q.attempts,q.sending_started_at,q.created_at,q.last_error FROM delivery_queue q JOIN subscribers s ON s.id=q.subscriber_id WHERE q.status IN ('sending','failed') ORDER BY CASE q.status WHEN 'sending' THEN 0 ELSE 1 END,q.id LIMIT 100").all();
+ return json({items:rows.results||[],policy:{staleSendingAfterMinutes:20,actionsRequireProviderLog:true}});
+}
 async function sendNow(req,env){
  if(!isAdmin(req,env))return denied();
  const incomplete=await env.DB.prepare("SELECT run_id FROM delivery_runs WHERE enqueue_complete=0 ORDER BY id LIMIT 1").first();
