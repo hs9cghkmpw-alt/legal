@@ -16,7 +16,7 @@ function request(body) {
   });
 }
 
-function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0 } = {}) {
+function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_ids: "[11]", status: "failed", sending_started_at: null }, lock = null, oldEnough = 0, queueUpdateChanges = 1 } = {}) {
   const calls = [];
   return {
     calls,
@@ -33,7 +33,7 @@ function fakeDb({ queue = { id: 7, run_id: "run-1", subscriber_id: 3, article_id
             },
             async run() {
               calls.push({ sql, args, operation: "run" });
-              return { meta: { changes: 1 } };
+              return { meta: { changes: sql.startsWith("UPDATE delivery_queue SET status='sent'") ? queueUpdateChanges : 1 } };
             },
             async all() {
               calls.push({ sql, args, operation: "all" });
@@ -139,3 +139,15 @@ test("mark_sent rejects malformed article_ids before any database mutation", asy
   }
 });
 
+
+
+test("mark_sent does not write sent records when the queue state update affects no rows", async () => {
+  const DB = fakeDb({ queueUpdateChanges: 0 });
+  const { response, body } = await invoke({
+    queue_id: 7, action: "mark_sent", provider_confirmed_accepted: true,
+  }, DB);
+  assert.equal(response.status, 409);
+  assert.match(body.error, /状態が変わった/);
+  assert.equal(DB.calls.filter(call => call.sql.includes("INTO sent")).length, 0);
+  assert.equal(DB.calls.filter(call => call.sql.includes("UPDATE delivery_queue SET status='sent'")).length, 1);
+});
