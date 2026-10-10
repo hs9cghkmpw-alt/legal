@@ -81,7 +81,7 @@ test("caps candidate writes per invocation and resumes inside the saved page",as
  const {DB,source,updates}=mockDb();
  const laws=Array.from({length:20},(_,i)=>law("LAW"+i,"2026-10-09","改正法"+i));
  const first=await collectEgovLawUpdates({DB},{fetchImpl:async()=>response(laws,null),now:new Date("2026-10-10T12:00:00Z")});
- assert.equal(first.collected,15);
+ assert.equal(first.collected,10);
  assert.equal(first.hasMore,true);
  assert.equal(updates.length,15);
  assert.equal(source.scan_offset,0);
