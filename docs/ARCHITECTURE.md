@@ -14,7 +14,13 @@
 8. Cronで最大20人ずつメール送信し、失敗時は最大5回再試行
 9. sent に記事ごとの配信履歴を保存
 
-## 出典・編集表示\n- メールには各記事の情報源ラベル、原文リンク、ルール変更レターが情報を抽出・編集した旨を表示する。\n- デジタル庁サイトのコンテンツは、権利表示や例外がない場合にPDL1.0が適用される旨が案内されている。出典を示し、編集・加工した場合はその旨を明示する。個別ページや第三者コンテンツの例外は別途確認する。\n- 参考：デジタル庁コピーライトポリシー https://www.digital.go.jp/copyright-policy 、公共データ利用規約 https://www.digital.go.jp/resources/open_data/public_data_license_v1.0\n- e-Gov APIの利用条件は別途確認し、確認前は `terms_checked=0` を維持する。\n\n## 安全方針
+## 出典・編集表示
+- メールには各記事の情報源ラベル、原文リンク、ルール変更レターが情報を抽出・編集した旨を表示する。
+- デジタル庁サイトのコンテンツは、権利表示や例外がない場合にPDL1.0が適用される旨が案内されている。出典を示し、編集・加工した場合はその旨を明示する。個別ページや第三者コンテンツの例外は別途確認する。
+- 参考：デジタル庁コピーライトポリシー https://www.digital.go.jp/copyright-policy 、公共データ利用規約 https://www.digital.go.jp/resources/open_data/public_data_license_v1.0
+- e-Gov APIの利用条件は別途確認し、確認前は `terms_checked=0` を維持する。
+
+## 安全方針
 - 情報源の利用条件確認前は sources.terms_checked=0 とし収集停止
 - 外部AI APIは使わず、未承認記事は配信しない
 - 管理APIはBearerトークンを要求し、実行系はPOST
