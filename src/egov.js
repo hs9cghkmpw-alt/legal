@@ -5,7 +5,7 @@ const DAY_MS=24*60*60*1000;
 const MAX_PAGES_PER_RUN=10;
 
 function validDate(value){
- if(typeof value!=="string"||!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return false;
+ if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
  const date=new Date(value+"T00:00:00Z");
  return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
 }
@@ -96,8 +96,8 @@ export async function collectEgovLawUpdates(env,{fetchImpl=fetch,now=new Date()}
    "改正区分: "+(item.mission||item.type||"不明"),
    "法令履歴ID: "+item.revisionId,
    "注意: 改正本文・施行日・経過措置は原文で確認してください。"
-  ].join("\\n");
-  const contentHash=await hash([item.id,item.title,item.date,item.revisionId].join("\\n"));
+  ].join("\n");
+  const contentHash=await hash([item.id,item.title,item.date,item.revisionId].join("\n"));
   const inserted=await env.DB.prepare("INSERT OR IGNORE INTO updates(source_id,external_id,title,url,published_at,description,content_hash) VALUES(?,?,?,?,?,?,?)")
    .bind(source.id,item.id,item.title,lawUrl,item.date,description,contentHash).run();
   const categories=classifyText(item.title+" "+item.lawTitle+" "+description);
