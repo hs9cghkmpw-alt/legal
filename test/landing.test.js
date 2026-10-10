@@ -41,7 +41,7 @@ test("inline onboarding JavaScript is syntactically valid after server rendering
     PRIVACY_URL: "https://example.test/privacy"
   });
   const html = await response.text();
-  const match = html.match(/<script>([\\s\\S]*?)<\\/script>/);
-  assert.ok(match, "landing page should include its onboarding script");
-  assert.doesNotThrow(() => new Function(match[1]));
+  const script = html.split("<script>")[1]?.split("</script>")[0];
+  assert.ok(script, "landing page should include its onboarding script");
+  assert.doesNotThrow(() => new Function(script));
 });
