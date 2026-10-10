@@ -85,13 +85,13 @@ test("caps candidate writes per invocation and resumes inside the saved page",as
  assert.equal(first.hasMore,true);
  assert.equal(updates.length,10);
  assert.equal(source.scan_offset,0);
- assert.equal(source.scan_item_offset,15);
+ assert.equal(source.scan_item_offset,10);
  assert.ok(source.scan_page_payload);
 
  let calls=0;
  const second=await collectEgovLawUpdates({DB},{fetchImpl:async()=>{calls++;throw Error("saved page should be reused")},now:new Date("2026-10-11T12:00:00Z")});
  assert.equal(calls,0);
- assert.equal(second.collected,5);
+ assert.equal(second.collected,10);
  assert.equal(second.hasMore,false);
  assert.equal(updates.length,20);
  assert.equal(source.scan_offset,0);
