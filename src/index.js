@@ -83,8 +83,8 @@ async function subscribe(req,env){
  const link=base(env)+"/confirm?token="+encodeURIComponent(ct);
  const policyUrl=privacyPolicyUrl(env);
  const confirmationText=["ルール変更レターへの登録申請を受け付けました。","このメールはメールアドレスの確認のために送信しています。確認リンクを開くまで登録・配信は開始されません。","登録した覚えがない場合は、このメールを無視してください。確認しなければ登録されません。","確認リンク：\n"+link,"配信は、選択した分野に該当する情報がある週に週1回を基本とします。","プライバシー方針：\n"+policyUrl].join("\n\n");
- const confirmationHtml='<h1>ルール変更レター</h1><p>登録申請を受け付けました。</p><p>このメールはメールアドレスの確認のために送信しています。確認リンクを開くまで登録・配信は開始されません。</p><p>登録した覚えがない場合は、このメールを無視してください。確認しなければ登録されません。</p><p><a href="'+escapeHtml(link)+'">メールアドレスを確認する</a></p><p>配信は、選択した分野に該当する情報がある週に週1回を基本とします。</p><p><a href="'+escapeHtml(policyUrl)+'">プライバシー方針</a></p>';
- try{await sendEmail(env,{to:email,subject:"【ルール変更レター】メールアドレスの確認",text:confirmationText,html:confirmationHtml})}
+ const confirmationHtml='<h1>ルール便</h1><p>登録申請を受け付けました。</p><p>このメールはメールアドレスの確認のために送信しています。確認リンクを開くまで登録・配信は開始されません。</p><p>登録した覚えがない場合は、このメールを無視してください。確認しなければ登録されません。</p><p><a href="'+escapeHtml(link)+'">メールアドレスを確認する</a></p><p>配信は、選択した分野に該当する情報がある週に週1回を基本とします。</p><p><a href="'+escapeHtml(policyUrl)+'">プライバシー方針</a></p>';
+ try{await sendEmail(env,{to:email,subject:"【ルール便】メールアドレスの確認",text:confirmationText,html:confirmationHtml})}
  catch(e){console.error("confirmation mail failed",String(e.message||e));return json({error:"確認メールを送信できませんでした"},502)}
  return json({message:"確認メールを送信しました。リンク先で登録を完了してください"},202);
 }
@@ -228,7 +228,7 @@ async function drainQueue(env,limit=20){
     if(!articles.results?.length)throw Error("approved-articles-not-found");
     const unsub=base(env)+"/unsubscribe?token="+encodeURIComponent(p.unsubscribe_token);
     const html=articles.results.map(x=>{const a=sourceAttribution(x.source_id);return "<article><h2>"+escapeHtml(x.title)+"</h2><p>"+escapeHtml(x.summary)+"</p><p><b>変更点：</b>"+escapeHtml(x.what_changed)+"</p><p><b>施行日：</b>"+escapeHtml(x.effective_date||"原文で確認してください")+"</p><p><b>対象者：</b>"+escapeHtml(x.who_affected)+"</p><p><b>対応：</b>"+escapeHtml(x.action_needed)+"</p><p><a href=\""+escapeHtml(x.url)+"\">公式情報・出典："+escapeHtml(a.label)+"</a></p><p><small>"+escapeHtml(a.note)+"</small></p></article><hr>"}).join("");
-    await sendEmail(env,{to:p.email,subject:"【ルール変更レター】今週のルール変更情報",html:"<h1>今週のルール変更情報</h1>"+html+'<p><a href="'+escapeHtml(unsub)+'">配信停止</a></p>',text:articles.results.map(x=>{const a=sourceAttribution(x.source_id);return x.title+"\n"+x.summary+"\n出典: "+a.label+"\n原文: "+x.url+"\n"+a.note}).join("\n\n---\n\n")+"\n配信停止: "+unsub});
+    await sendEmail(env,{to:p.email,subject:"【ルール便】今週のルール変更情報",html:"<h1>今週のルール変更情報</h1>"+html+'<p><a href="'+escapeHtml(unsub)+'">配信停止</a></p>',text:articles.results.map(x=>{const a=sourceAttribution(x.source_id);return x.title+"\n"+x.summary+"\n出典: "+a.label+"\n原文: "+x.url+"\n"+a.note}).join("\n\n---\n\n")+"\n配信停止: "+unsub});
     for(const x of articles.results)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(p.subscriber_id,x.id).run();
     await env.DB.prepare("UPDATE delivery_queue SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(p.id).run();sent++;
    }catch(e){errors++;await env.DB.prepare("UPDATE delivery_queue SET status=CASE WHEN attempts>=5 THEN 'failed' ELSE 'pending' END,next_attempt_at=datetime('now','+' || MIN(60,5*attempts) || ' minutes'),last_error=? WHERE id=?").bind(String(e.message||e).slice(0,500),p.id).run();}
