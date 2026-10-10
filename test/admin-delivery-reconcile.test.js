@@ -117,3 +117,25 @@ test("a sending queue younger than 20 minutes cannot be retried", async () => {
   assert.match(body.error, /20分以上経過/);
   assert.equal(DB.calls.filter(call => call.operation === "run").length, 0);
 });
+
+test("mark_sent rejects malformed article_ids before any database mutation", async () => {
+  const invalidArticleIds = [
+    "{invalid-json", "[]", "{}", "null", "[0]", "[-1]", "[1.5]",
+    "[11,0]", '["11"]', "[true]", "[null]", "[9007199254740992]",
+  ];
+  for (const article_ids of invalidArticleIds) {
+    const DB = fakeDb({ queue: {
+      id: 7, run_id: "run-1", subscriber_id: 3, article_ids,
+      status: "failed", sending_started_at: null,
+    }});
+    const { response, body } = await invoke({
+      queue_id: 7, action: "mark_sent", provider_confirmed_accepted: true,
+    }, DB);
+    assert.equal(response.status, 409, article_ids);
+    assert.match(body.error, /article_ids/);
+    assert.equal(DB.calls.filter(call => call.operation === "run").length, 0, article_ids);
+    assert.equal(DB.calls.filter(call => call.sql.includes("INTO sent")).length, 0, article_ids);
+    assert.equal(DB.calls.filter(call => call.sql.includes("UPDATE delivery_queue") || call.sql.includes("UPDATE delivery_runs")).length, 0, article_ids);
+  }
+});
+
