@@ -28,5 +28,9 @@ npx wrangler dev
 - `POST /api/admin/approve` — 記事承認（Bearerトークン必須）
 - `POST /api/admin/send` — キュー作成と最大20人の即時処理（Bearerトークン必須）
 
+## URL設定
+- ローカル開発では `.dev.vars` の `BASE_URL=http://localhost:8787` を使用します。
+- 公開環境では `BASE_URL` に実際のWorkerのHTTPS URLを明示設定してください。未設定・HTTPの公開URLでは登録を拒否し、確認メールにlocalhostリンクが入る事故を防ぎます。
+
 ## 公開前必須
 情報源の利用条件、プライバシー方針、運営者情報、ボット対策、メール送信元認証、Cloudflare/Brevoの無料枠、Cron制限、バックアップ、配信停止を確認してください。公布日と施行日を混同しないこと。
