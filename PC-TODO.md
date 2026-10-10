@@ -57,6 +57,7 @@ npx wrangler dev
 ## 人が確認すべき項目
 - docs/SOURCE_REUSE_REVIEW.md を読み、情報源ごとの利用条件の未解決点を確認。最終判断が済むまで terms_checked=0 を維持
 - docs/EDITORIAL_QA.md のチェックリストを使い、実データ候補5件を公式原文と照合。記録が揃うまでサンプルを公開せず、配信しない
+- docs/SAMPLE_ARTICLE_DRAFT.md は内部用・未承認。改正法本文・附則・関係政令まで確認するまでは公開サンプルに使わない
 - 公開環境の `BASE_URL` を実際のWorker URL（HTTPS）に設定し、localhostがメール本文に入らないことを確認
 - プライバシー方針の草案を完成させ、運営者情報・問い合わせ先・保存期間・Cloudflare/Brevoの処理内容・ログ/バックアップ保持を記載
 - デジタル庁RSSとe-Gov法令API Version 2の利用条件・例外・出典表記を確認し、未確認なら `terms_checked=0`
