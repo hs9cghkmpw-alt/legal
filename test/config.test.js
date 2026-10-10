@@ -48,3 +48,29 @@ test("resubscription removes stale unsent queue rows before rotating tokens",asy
   assert.ok(rotate>purge,"must purge before reactivating the subscription");
  }finally{globalThis.fetch=originalFetch}
 });
+
+test("unsubscribe page offers deletion and GET does not mutate data",async()=>{
+ const res=await app.fetch(new Request("https://worker.example/unsubscribe?token=valid-token"),{DB:{prepare(){throw new Error("GET must not touch DB")}}});
+ assert.equal(res.status,200);
+ const html=await res.text();
+ assert.match(html,/配信を停止し、登録情報を削除する/);
+ assert.match(html,/name="action" value="delete"/);
+});
+
+test("explicit deletion removes subscriber and its email rate-limit key",async()=>{
+ const queries=[];
+ const DB={prepare(sql){return {bind(...args){return {
+  first:async()=>sql.includes("SELECT id,email FROM subscribers WHERE unsubscribe_token")?{id:7,email:"person@example.jp"}:null,
+  run:async()=>{queries.push({sql,args});return {meta:{changes:1}}}
+ }}}}};
+ const req=new Request("https://worker.example/unsubscribe",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({token:"valid-token",action:"delete"})});
+ const res=await app.fetch(req,{DB});
+ assert.equal(res.status,200);
+ assert.match(await res.text(),/登録情報を削除しました/);
+ const rate=queries.findIndex(x=>x.sql.startsWith("DELETE FROM rate_limits WHERE rate_key=?"));
+ const subscriber=queries.findIndex(x=>x.sql.startsWith("DELETE FROM subscribers WHERE id=?"));
+ assert.ok(rate>=0);
+ assert.ok(subscriber>rate);
+ assert.equal(queries[rate].args[0],"email:person@example.jp");
+ assert.equal(queries[subscriber].args[0],7);
+});
