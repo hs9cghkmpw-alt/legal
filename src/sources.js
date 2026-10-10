@@ -51,12 +51,11 @@ export async function collectDigitalRss(env){
   const contentHash=await hash([title,url,published_at||""].join("\n"));
   const inserted=await env.DB.prepare("INSERT OR IGNORE INTO updates(source_id,external_id,title,url,published_at,description,content_hash) VALUES(?,?,?,?,?,?,?)")
    .bind(source.id,external,title,url,published_at,description,contentHash).run();
-  if(inserted.meta?.changes){
-   const categories=classifyText(title+" "+description);
-   await env.DB.prepare("INSERT OR IGNORE INTO articles(update_id,summary,what_changed,who_affected,action_needed,category_ids,status) SELECT id,?,?,?,?,?,'pending' FROM updates WHERE source_id=? AND external_id=?")
-    .bind("公式発表の確認候補です。原文確認前の解説ではありません。","原文確認が必要です。","原文で対象者を確認してください。","施行日・適用条件を原文で確認してください。",JSON.stringify(categories),source.id,external).run();
-   count++;
-  }
+  // Repair an interrupted prior run: an update row may exist even if article creation failed.
+  const categories=classifyText(title+" "+description);
+  await env.DB.prepare("INSERT OR IGNORE INTO articles(update_id,summary,what_changed,who_affected,action_needed,category_ids,status) SELECT id,?,?,?,?,?,'pending' FROM updates WHERE source_id=? AND external_id=?")
+   .bind("公式発表の確認候補です。原文確認前の解説ではありません。","原文確認が必要です。","原文で対象者を確認してください。","施行日・適用条件を原文で確認してください。",JSON.stringify(categories),source.id,external).run();
+  if(inserted.meta?.changes)count++;
  }
  await env.DB.prepare("UPDATE sources SET last_checked_at=CURRENT_TIMESTAMP,last_error=NULL WHERE id=?").bind(source.id).run();
  return {collected:count,scanned:items.length};
