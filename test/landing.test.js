@@ -35,3 +35,13 @@ test("a configured HTTPS privacy policy enables signup controls and links to the
   assert.match(html, /id="submit">確認メールを送る/);
   assert.match(html, /name="consent" required>/);
 });
+
+test("inline onboarding JavaScript is syntactically valid after server rendering", async () => {
+  const response = await worker.fetch(new Request("https://example.test/"), {
+    PRIVACY_URL: "https://example.test/privacy"
+  });
+  const html = await response.text();
+  const match = html.match(/<script>([\\s\\S]*?)<\\/script>/);
+  assert.ok(match, "landing page should include its onboarding script");
+  assert.doesNotThrow(() => new Function(match[1]));
+});
