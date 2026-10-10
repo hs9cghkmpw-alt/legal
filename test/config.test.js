@@ -87,3 +87,24 @@ test("subscription rejects malformed or non-HTTPS privacy policy URLs before dat
   assert.match((await res.json()).error,/プライバシー方針/);
  }
 });
+
+
+import { rateLimit } from "../src/index.js";
+
+test("rate limit increments through one atomic conditional upsert", async () => {
+  let captured;
+  const env = { DB: { prepare(sql) {
+    return { bind(...args) { return { async run() { captured = { sql, args }; return { meta: { changes: 1 } }; } }; } };
+  } } };
+  assert.equal(await rateLimit(env, "email:test@example.com", 3), true);
+  assert.match(captured.sql, /ON CONFLICT\(rate_key,window_start\) DO UPDATE SET count=count\+1 WHERE rate_limits\.count < \?/);
+  assert.equal(captured.args[0], "email:test@example.com");
+  assert.equal(captured.args[2], 3);
+});
+
+test("rate limit rejects atomically when the conditional upsert makes no change", async () => {
+  const env = { DB: { prepare() {
+    return { bind() { return { async run() { return { meta: { changes: 0 } }; } }; } };
+  } } };
+  assert.equal(await rateLimit(env, "email:test@example.com", 3), false);
+});
