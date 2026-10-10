@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import app from "../src/index.js";
+import app, { rateLimit } from "../src/index.js";
 
 function request(body){
  return new Request("https://worker.example/api/subscribe",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
@@ -88,8 +88,6 @@ test("subscription rejects malformed or non-HTTPS privacy policy URLs before dat
  }
 });
 
-
-import { rateLimit } from "../src/index.js";
 
 test("rate limit increments through one atomic conditional upsert", async () => {
   let captured;
