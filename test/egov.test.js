@@ -48,7 +48,7 @@ test("collects recent amendments, ignores older ones, and groups revisions by am
  assert.equal(updates.length,1);
  assert.equal(updates[0].externalId,"A_revision");
  assert.equal(updates[0].publishedAt,"2026-10-09");
- assert.match(updates[0].url,/laws\.e-gov\.go\.jp\/law\/A_amend$/);
+ assert.match(updates[0].url,/laws\.e-gov\.go\.jp\/law\/A$/);
  assert.equal(articles.length,1);
  assert.equal(urls[0].searchParams.get("order"),null);
  assert.equal(urls[0].searchParams.get("limit"),"100");
