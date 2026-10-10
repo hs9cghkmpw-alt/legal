@@ -34,3 +34,30 @@ test("delivery reconciliation admin endpoints reject missing or invalid admin to
     }
   }
 });
+
+
+test("delivery issues endpoint includes the suspicious sent state after history-write recovery failure", async () => {
+  const token = "admin-token-".padEnd(40, "x");
+  let query = "";
+  const suspicious = {
+    id: 19, status: "sent",
+    last_error: "manually-confirmed-provider-accepted",
+  };
+  const DB = {
+    prepare(sql) {
+      query = sql;
+      return {
+        async all() { return { results: [suspicious] }; },
+      };
+    },
+  };
+  const req = new Request("https://worker.example/api/admin/delivery-issues", {
+    headers: { authorization: "Bearer " + token },
+  });
+  const res = await app.fetch(req, { ADMIN_TOKEN: token, DB });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.match(query, /q\.status='sent' AND q\.last_error='manually-confirmed-provider-accepted'/);
+  assert.equal(body.items[0].id, 19);
+  assert.match(body.policy.manualSentRecordWriteAnomaly, /manual inspection/);
+});
