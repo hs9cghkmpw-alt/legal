@@ -74,3 +74,11 @@ test("explicit deletion removes subscriber and its email rate-limit key",async()
  assert.equal(queries[rate].args[0],"email:person@example.jp");
  assert.equal(queries[subscriber].args[0],7);
 });
+
+test("subscription rejects malformed or non-HTTPS privacy policy URLs before database access",async()=>{
+ for(const privacy of ["http://worker.example/privacy","https://","javascript:alert(1)"]){
+  const res=await app.fetch(request(valid),{PRIVACY_URL:privacy,BASE_URL:"https://worker.example",DB:{prepare(){throw new Error("DB must not be touched")}}});
+  assert.equal(res.status,503,privacy);
+  assert.match((await res.json()).error,/プライバシー方針/);
+ }
+});
