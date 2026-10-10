@@ -277,8 +277,8 @@ async function reconcileDelivery(req,env){
  if(action==="mark_sent"){
   if(d.provider_confirmed_accepted!==true)return json({error:"事業者ログで受理を確認した場合のみ provider_confirmed_accepted=true を指定してください"},400);
   let ids;try{ids=JSON.parse(q.article_ids)}catch{return json({error:"article_ids が壊れているため手動確認が必要です"},409)}
-  if(!Array.isArray(ids)||!ids.length||ids.some(x=>!Number.isSafeInteger(Number(x))||Number(x)<1))return json({error:"article_ids が不正です"},409);
-  for(const articleId of ids)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(q.subscriber_id,Number(articleId)).run();
+  if(!Array.isArray(ids)||!ids.length||ids.some(x=>typeof x!=="number"||!Number.isSafeInteger(x)||x<1))return json({error:"article_ids が不正です"},409);
+  for(const articleId of ids)await env.DB.prepare("INSERT OR IGNORE INTO sent(subscriber_id,article_id) VALUES(?,?)").bind(q.subscriber_id,articleId).run();
   await env.DB.prepare("UPDATE delivery_queue SET status='sent',sent_at=COALESCE(sent_at,CURRENT_TIMESTAMP),sending_started_at=NULL,last_error='manually-confirmed-provider-accepted' WHERE id=? AND status IN ('sending','failed')").bind(id).run();
  }else{
   if(d.provider_confirmed_not_accepted!==true)return json({error:"事業者ログで未受理を確認した場合のみ provider_confirmed_not_accepted=true を指定してください"},400);
