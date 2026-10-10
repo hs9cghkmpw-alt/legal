@@ -92,9 +92,9 @@ async function confirm(req,url,env){
  let t=url.searchParams.get("token")||"";
  if(req.method==="POST"){try{t=String((await req.formData()).get("token")||"")}catch{}}
  if(!t||t.length>100)return page("確認できません","<h1>確認リンクが無効です</h1>",400);
- if(req.method==="GET")return page("登録確認",'<h1>メールアドレスの確認</h1><form method="post" action="/confirm"><input type="hidden" name="token" value="'+escapeHtml(t)+'"><button>登録を完了する</button></form>');
+ if(req.method==="GET")return page("登録確認",'<h1>メールアドレスの確認</h1><p>ボタンを押すと登録が完了します。</p><form method="post" action="/confirm"><input type="hidden" name="token" value="'+escapeHtml(t)+'"><button>登録を完了する</button></form><p>登録した覚えがない場合は、このページを閉じてください。</p>');
  const r=await env.DB.prepare("UPDATE subscribers SET confirmed=1,confirmed_at=CURRENT_TIMESTAMP WHERE confirmation_token=? AND unsubscribed=0").bind(t).run();
- return r.meta.changes?page("登録完了","<h1>登録が完了しました</h1>"):page("確認できません","<h1>リンクが無効です</h1>",400);
+ return r.meta.changes?page("登録完了","<h1>登録が完了しました</h1><p>選択した分野に該当する情報がある週に、週1回を基本としてメールをお届けします。</p><p>メールが届かない場合は、迷惑メールフォルダをご確認ください。</p><p>配信停止・登録情報の削除は、配信メールに記載するリンクから行えます。</p>"):page("確認できません","<h1>リンクが無効です</h1><p>リンクの期限切れ、または登録済みの可能性があります。</p>",400);
 }
 async function unsubscribe(req,url,env){
  let t=url.searchParams.get("token")||"",action="unsubscribe";
