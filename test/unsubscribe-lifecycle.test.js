@@ -70,3 +70,52 @@ test("invalid unsubscribe token does not mutate data", async () => {
   assert.equal(response.status, 404);
   assert.equal(DB.calls.filter(c => c.op === "run").length, 0);
 });
+
+
+test("resubscribe clears pending queue rows but preserves sending and failed rows for reconciliation", async () => {
+  const calls = [];
+  const DB = {
+    prepare(sql) {
+      return {
+        bind(...args) {
+          return {
+            async first() {
+              calls.push({ sql, args, op: "first" });
+              if (sql.includes("SELECT id,confirmed,unsubscribed FROM subscribers WHERE email=?")) {
+                return { id: 8, confirmed: 0, unsubscribed: 1 };
+              }
+              return null;
+            },
+            async run() {
+              calls.push({ sql, args, op: "run" });
+              return { meta: { changes: 1, last_row_id: 8 } };
+            },
+          };
+        },
+      };
+    },
+  };
+  const request = new Request("https://worker.example/api/subscribe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: "person@example.jp",
+      roles: [],
+      categories: ["consumer"],
+      consent: true,
+    }),
+  });
+  // No mail-provider credentials are supplied; the request stops at confirmation email delivery.
+  const response = await app.fetch(request, {
+    DB,
+    SIGNUP_ENABLED: "true",
+    PRIVACY_URL: "https://example.jp/privacy",
+    BASE_URL: "https://worker.example",
+  });
+  assert.equal(response.status, 502);
+  const cleanup = calls.find(c => c.sql.startsWith("DELETE FROM delivery_queue WHERE subscriber_id=?"));
+  assert.ok(cleanup);
+  assert.match(cleanup.sql, /status='pending'/);
+  assert.doesNotMatch(cleanup.sql, /status!='sent'/);
+  assert.ok(calls.some(c => c.sql.startsWith("UPDATE subscribers SET confirmation_token=")));
+});
