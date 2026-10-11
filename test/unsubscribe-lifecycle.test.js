@@ -41,8 +41,8 @@ test("unsubscribe GET only renders confirmation choices and does not mutate data
   const DB = fakeDb();
   const response = await app.fetch(new Request(url + "?token=" + token), { DB });
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /配信を停止する/);
-  assert.match(await response.text().catch(() => ""), /配信を停止する/);
+  const html = await response.text();
+  assert.match(html, /配信を停止する/);
   assert.equal(DB.calls.length, 0);
 });
 
