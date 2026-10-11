@@ -33,7 +33,7 @@ function fakeDb(total){
 }
 
 test("weekly enqueue resumes in bounded batches and completes only after all subscribers are scanned",async()=>{
- const db=fakeDb(120),env={DB:db};
+ const db=fakeDb(120),env={DB:db,SIGNUP_ENABLED:"true"};
  const first=await enqueueWeekly(env,"weekly-test",50);
  assert.equal(first.enqueueComplete,false);
  assert.equal(first.lastSubscriberId,50);

@@ -17,5 +17,5 @@ test("identifies e-Gov law API and avoids implying official legal advice",()=>{
 test("uses a safe generic attribution for unknown sources",()=>{
  const value=sourceAttribution("unknown");
  assert.match(value.label,/公式情報/);
- assert.match(value.note,/ルール変更レター/);
+ assert.match(value.note,/ルール便/);
 });

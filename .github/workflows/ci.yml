@@ -18,3 +18,20 @@ jobs:
       - run: node --check src/attribution.js
       - run: node --check src/email.js
       - run: npm test
+      - name: Validate fresh SQLite schema and seed data
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(":memory:")
+          db.executescript(Path("schema.sql").read_text(encoding="utf-8"))
+          tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          required = {"subscribers", "sources", "delivery_queue", "system_locks"}
+          assert required <= tables, f"Missing tables: {required - tables}"
+          source_ids = {row[0] for row in db.execute("SELECT id FROM sources")}
+          assert {"digital_rss", "egov_law_api"} <= source_ids, f"Missing sources: {source_ids}"
+          role_ids = {row[0] for row in db.execute("SELECT id FROM roles")}
+          assert "individual" in role_ids, f"Missing seeded roles: {role_ids}"
+          print("Fresh schema applied; required tables and seed rows verified.")
+          PY
