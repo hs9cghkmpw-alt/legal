@@ -26,7 +26,7 @@ test("local development may use localhost base URL",async()=>{
  // The request passed URL validation and reached the database stub.
 });
 
-test("resubscription removes stale unsent queue rows before rotating tokens",async()=>{
+test("resubscription clears pending queue rows but preserves unresolved delivery rows",async()=>{
  const queries=[];
  const DB={prepare(sql){return {bind(...args){return {
   first:async()=>{
@@ -47,10 +47,11 @@ test("resubscription removes stale unsent queue rows before rotating tokens",asy
   assert.match(sentEmail.textContent,/登録した覚えがない場合は、このメールを無視してください/);
   assert.match(sentEmail.textContent,/https:\/\/worker\.example\/privacy/);
   assert.match(sentEmail.htmlContent,/プライバシー方針/);
-  const purge=queries.findIndex(x=>x.sql.startsWith("DELETE FROM delivery_queue WHERE subscriber_id=? AND status!='sent'"));
+  const purge=queries.findIndex(x=>x.sql.startsWith("DELETE FROM delivery_queue WHERE subscriber_id=? AND status='pending'"));
   const rotate=queries.findIndex(x=>x.sql.startsWith("UPDATE subscribers SET confirmation_token="));
-  assert.ok(purge>=0,"must delete stale unsent queue entries");
-  assert.ok(rotate>purge,"must purge before reactivating the subscription");
+  assert.ok(purge>=0,"must delete pending queue entries");
+  assert.ok(rotate>purge,"must clear pending rows before rotating the confirmation token");
+  assert.doesNotMatch(queries[purge].sql,/status!='sent'/,"must preserve sending/failed rows for provider-outcome reconciliation");
  }finally{globalThis.fetch=originalFetch}
 });
 
