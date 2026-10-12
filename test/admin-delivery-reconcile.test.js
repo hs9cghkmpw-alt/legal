@@ -191,6 +191,23 @@ test("mark_sent reports when sent history insert fails and queue revert affects 
 });
 
 
+test("retry refuses malformed article_ids before changing the queue", async () => {
+  const invalidArticleIds = ["{invalid-json", "[]", "null", "[0]", "[1.5]", '["11"]'];
+  for (const article_ids of invalidArticleIds) {
+    const DB = fakeDb({ queue: {
+      id: 7, run_id: "run-1", subscriber_id: 3, article_ids,
+      status: "failed", sending_started_at: null,
+    }});
+    const { response, body } = await invoke({
+      queue_id: 7, action: "retry_confirmed_not_sent", provider_confirmed_not_accepted: true,
+    }, DB);
+    assert.equal(response.status, 409, article_ids);
+    assert.match(body.error, /article_ids/);
+    assert.equal(DB.calls.filter(call => call.sql.startsWith("UPDATE delivery_queue SET status='pending'")).length, 0);
+    assert.equal(DB.calls.filter(call => call.sql.startsWith("UPDATE delivery_runs")).length, 0);
+  }
+});
+
 test("retry reconciliation refuses success when the conditional queue update affects no rows", async () => {
   const DB = fakeDb({ retryQueueUpdateChanges: 0 });
   const { response, body } = await invoke({
