@@ -306,6 +306,8 @@ async function reconcileDelivery(req,env){
   }
  }else{
   if(d.provider_confirmed_not_accepted!==true)return json({error:"事業者ログで未受理を確認した場合のみ provider_confirmed_not_accepted=true を指定してください"},400);
+  let retryIds;try{retryIds=JSON.parse(q.article_ids)}catch{return json({error:"article_ids が壊れているため再試行せず手動確認してください"},409)}
+  if(!Array.isArray(retryIds)||!retryIds.length||retryIds.some(x=>typeof x!=="number"||!Number.isSafeInteger(x)||x<1))return json({error:"article_ids が不正なため再試行せず手動確認してください"},409);
   if(q.status==="sending"){
    const age=await env.DB.prepare("SELECT CASE WHEN sending_started_at IS NOT NULL AND datetime(sending_started_at)<=datetime('now','-20 minutes') THEN 1 ELSE 0 END AS old_enough FROM delivery_queue WHERE id=?").bind(id).first();
    if(Number(age?.old_enough)!==1)return json({error:"sending は開始から20分以上経過した行だけ再試行できます。Workerの停止と事業者ログも確認してください"},409);
