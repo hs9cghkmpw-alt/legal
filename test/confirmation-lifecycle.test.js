@@ -46,7 +46,7 @@ test("confirmation POST confirms only with the current token and an active subsc
   assert.equal(response.status, 200);
   assert.match(await response.text(), /登録が完了しました/);
   assert.equal(DB.calls.length, 1);
-  assert.match(DB.calls[0].sql, /WHERE confirmation_token=\? AND unsubscribed=0/);
+  assert.match(DB.calls[0].sql, /WHERE confirmation_token=\\? AND unsubscribed=0 AND confirmed=0/);
   assert.equal(DB.calls[0].args[0], token);
 });
 
