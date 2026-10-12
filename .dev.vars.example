@@ -4,4 +4,6 @@ ADMIN_TOKEN=replace-with-a-random-secret-of-at-least-32-characters
 BASE_URL=http://localhost:8787
 SENDER_EMAIL=replace-with-verified-sender@example.com
 PRIVACY_URL=
+# true にするのは公開前チェック完了後のみ。通常は未設定／false のまま
+SIGNUP_ENABLED=false
 PRIVACY_VERSION=draft-1
